@@ -3,6 +3,13 @@
     "supabase": {
       "type": "http",
       "url": "https://mcp.supabase.com/mcp?project_ref=rbltthvigaropascfmiu&features=database%2Caccount%2Cdocs%2Cdebugging%2Cdevelopment%2Cfunctions%2Cbranching"
+    },
+    "mcp-tools-istefox": {
+      "type": "http",
+      "url": "http://127.0.0.1:27200/mcp",
+      "headers": {
+        "Authorization": "Bearer _4WmO5sw0l3ksSozwKzhfdwBXdVHhKlfmX536ITjQsg"
+      }
     }
   }
 }
