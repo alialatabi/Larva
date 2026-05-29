@@ -22,10 +22,12 @@ create table if not exists larva_core.players (
 
 alter table larva_core.players enable row level security;
 
+drop policy if exists "Players can read own profile" on larva_core.players;
 create policy "Players can read own profile"
   on larva_core.players for select
   using (auth_user_id = auth.uid());
 
+drop policy if exists "Players can update own profile" on larva_core.players;
 create policy "Players can update own profile"
   on larva_core.players for update
   using (auth_user_id = auth.uid());
