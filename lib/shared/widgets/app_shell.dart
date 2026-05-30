@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
@@ -88,11 +87,11 @@ class _AppBottomNav extends StatelessWidget {
   final bool isUrgent;
 
   static const _tabs = [
-    _TabItem(icon: PhosphorIconsRegular.house,   activeIcon: PhosphorIconsFill.house,   label: 'Home'),
-    _TabItem(icon: PhosphorIconsRegular.buildings, activeIcon: PhosphorIconsFill.buildings, label: 'Empire'),
-    _TabItem(icon: PhosphorIconsRegular.creditCard, activeIcon: PhosphorIconsFill.creditCard, label: 'Finance'),
-    _TabItem(icon: PhosphorIconsRegular.globe,   activeIcon: PhosphorIconsFill.globe,   label: 'World'),
-    _TabItem(icon: PhosphorIconsRegular.user,    activeIcon: PhosphorIconsFill.user,    label: 'Profile'),
+    _TabItem(icon: Icons.home_outlined,      activeIcon: Icons.home,          label: 'Home'),
+    _TabItem(icon: Icons.business_outlined,  activeIcon: Icons.business,      label: 'Empire'),
+    _TabItem(icon: Icons.credit_card_outlined, activeIcon: Icons.credit_card, label: 'Finance'),
+    _TabItem(icon: Icons.language_outlined,  activeIcon: Icons.language,      label: 'World'),
+    _TabItem(icon: Icons.person_outline,     activeIcon: Icons.person,        label: 'Profile'),
   ];
 
   @override
@@ -110,8 +109,8 @@ class _AppBottomNav extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: AppSpacing.sm),
-            // Cycle countdown chip
-            Container(
+            // RepaintBoundary: isolates per-second repaints from the tab row
+            RepaintBoundary(child: Container(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
               decoration: BoxDecoration(
                 color: AppColors.bgElevated,
@@ -121,14 +120,14 @@ class _AppBottomNav extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(PhosphorIconsRegular.clock, size: 12, color: chipColor),
+                  Icon(Icons.access_time, size: 12, color: chipColor),
                   const SizedBox(width: AppSpacing.xs),
                   Text(countdownLabel, style: AppTypography.labelCaps.copyWith(color: chipColor)),
                 ],
               ),
-            ),
+            )),
             const SizedBox(height: AppSpacing.sm),
-            // Tab row
+            // Tab row — ui-ux-pro-max: Semantics label + touch target ≥44pt
             SizedBox(
               height: 52,
               child: Row(
@@ -136,29 +135,38 @@ class _AppBottomNav extends StatelessWidget {
                   final tab = _tabs[i];
                   final active = i == currentIndex;
                   return Expanded(
-                    child: GestureDetector(
-                      onTap: () => onTap(i),
-                      behavior: HitTestBehavior.opaque,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // Gold underline above icon for active tab
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            height: 2,
-                            width: active ? 24 : 0,
-                            decoration: BoxDecoration(
-                              color: AppColors.gold,
-                              borderRadius: BorderRadius.circular(1),
+                    child: Semantics(
+                      label: tab.label,
+                      selected: active,
+                      button: true,
+                      child: GestureDetector(
+                        onTap: () => onTap(i),
+                        behavior: HitTestBehavior.opaque,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOutCubic,
+                              height: 2,
+                              width: active ? 24 : 0,
+                              decoration: BoxDecoration(
+                                color: AppColors.gold,
+                                borderRadius: BorderRadius.circular(1),
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: AppSpacing.xs),
-                          Icon(
-                            active ? tab.activeIcon : tab.icon,
-                            size: 22,
-                            color: active ? AppColors.gold : AppColors.textTertiary,
-                          ),
-                        ],
+                            const SizedBox(height: AppSpacing.xs),
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 200),
+                              child: Icon(
+                                active ? tab.activeIcon : tab.icon,
+                                key: ValueKey('${tab.label}_$active'),
+                                size: 22,
+                                color: active ? AppColors.gold : AppColors.textTertiary,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   );

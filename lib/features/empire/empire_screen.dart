@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
@@ -175,15 +176,30 @@ class _EmpireDashboard extends StatelessWidget {
               const SizedBox(height: 2),
               Text('Alex Rivera', style: AppTypography.headingM),
             ]),
-            Container(
-              width: 40, height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.bgSurface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.borderSubtle),
+            Row(children: [
+              GestureDetector(
+                onTap: () => context.go('/empire/stocks'),
+                child: Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.bgSurface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.borderSubtle),
+                  ),
+                  child: const Icon(Icons.bar_chart, color: AppColors.textPrimary, size: 18),
+                ),
               ),
-              child: const Icon(Icons.notifications_none_rounded, color: AppColors.textPrimary, size: 18),
-            ),
+              const SizedBox(width: 8),
+              Container(
+                width: 40, height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.bgSurface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.borderSubtle),
+                ),
+                child: const Icon(Icons.notifications_none_rounded, color: AppColors.textPrimary, size: 18),
+              ),
+            ]),
           ]),
         ),
         // Net worth pill
@@ -226,14 +242,14 @@ class _EmpireDashboard extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenH),
             children: [
-              const _MiniCompanyCard(name: 'Volta Café',      type: 'Café',        revenue: 4200,  icon: '☕', status: 'good'),
+              _MiniCompanyCard(id: 1, name: 'Volta Café',      type: 'Café',        revenue: 4200,  icon: '☕', status: 'good'),
               const SizedBox(width: 12),
-              const _MiniCompanyCard(name: 'Volta Foods',     type: 'Food Mfg',    revenue: -800,  icon: '🏭', status: 'warning'),
+              _MiniCompanyCard(id: 2, name: 'Volta Foods',     type: 'Food Mfg',    revenue: -800,  icon: '🏭', status: 'warning'),
               const SizedBox(width: 12),
-              const _MiniCompanyCard(name: 'Caedoria Retail', type: 'Electronics', revenue: 3100,  icon: '📱', status: 'good'),
+              _MiniCompanyCard(id: 3, name: 'Caedoria Retail', type: 'Electronics', revenue: 3100,  icon: '📱', status: 'good'),
               if (newCompany != null) ...[
                 const SizedBox(width: 12),
-                _MiniCompanyCard(name: newCompany!.name, type: 'Café', revenue: 0, icon: newCompany!.icon, status: 'new'),
+                _MiniCompanyCard(id: 0, name: newCompany!.name, type: 'Café', revenue: 0, icon: newCompany!.icon, status: 'new'),
               ] else ...[
                 const SizedBox(width: 12),
                 GestureDetector(
@@ -288,35 +304,42 @@ class _EmpireDashboard extends StatelessWidget {
 }
 
 class _MiniCompanyCard extends StatelessWidget {
-  const _MiniCompanyCard({required this.name, required this.type, required this.revenue, required this.icon, required this.status});
+  const _MiniCompanyCard({required this.id, required this.name, required this.type, required this.revenue, required this.icon, required this.status});
+  final int id, revenue;
   final String name, type, icon, status;
-  final int revenue;
 
   @override
   Widget build(BuildContext context) {
     final pos = revenue >= 0;
-    return Container(
-      width: 186,
-      decoration: BoxDecoration(
-        color: AppColors.bgSurface,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: status == 'warning' ? AppColors.amber.withOpacity(0.4) : AppColors.borderSubtle),
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(icon, style: const TextStyle(fontSize: 20)),
-        const SizedBox(height: 6),
-        Text(name, style: AppTypography.bodyS.copyWith(fontWeight: FontWeight.w600, color: AppColors.textPrimary, fontSize: 13)),
-        Text(type, style: AppTypography.labelCaps.copyWith(fontSize: 11)),
-        const SizedBox(height: AppSpacing.md),
-        Text(
-          status == 'new' ? '● Just launched' :
-          '${pos ? '+' : '−'}\$ ${NumberFormat.decimalPattern().format(revenue.abs())}',
-          style: status == 'new'
-              ? AppTypography.dataS.copyWith(color: AppColors.emerald, fontSize: 10)
-              : AppTypography.dataM.copyWith(fontSize: 17, color: pos ? AppColors.emerald : AppColors.crimson),
+    final borderColor = status == 'warning'
+        ? AppColors.amber.withValues(alpha: 0.4)
+        : AppColors.borderSubtle;
+
+    return GestureDetector(
+      onTap: id > 0 ? () => context.go('/empire/company/$id') : null,
+      child: Container(
+        width: 186,
+        decoration: BoxDecoration(
+          color: AppColors.bgSurface,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: borderColor),
         ),
-      ]),
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(icon, style: const TextStyle(fontSize: 20)),
+          const SizedBox(height: 6),
+          Text(name, style: AppTypography.bodyS.copyWith(fontWeight: FontWeight.w600, color: AppColors.textPrimary, fontSize: 13)),
+          Text(type, style: AppTypography.labelCaps.copyWith(fontSize: 11)),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            status == 'new' ? '● Just launched' :
+            '${pos ? '+' : '−'}\$ ${NumberFormat.decimalPattern().format(revenue.abs())}',
+            style: status == 'new'
+                ? AppTypography.dataS.copyWith(color: AppColors.emerald, fontSize: 10)
+                : AppTypography.dataM.copyWith(fontSize: 17, color: pos ? AppColors.emerald : AppColors.crimson),
+          ),
+        ]),
+      ),
     );
   }
 }

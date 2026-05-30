@@ -5,8 +5,9 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../../shared/widgets/pressable.dart';
 
-// ── Static mock data (replaced by Riverpod providers in Phase 3) ─────────────
+// ── Static mock data ──────────────────────────────────────────────────────────
 
 class _NeedData {
   const _NeedData({required this.label, required this.val, required this.trend, required this.icon, required this.color});
@@ -49,7 +50,44 @@ const _events = [
   _EventData(id: 2, title: 'Supply Disruption', scope: 'Global',   severity: 'minor', cyclesLeft: 2, affectsMe: false),
 ];
 
-// ── DashboardScreen ──────────────────────────────────────────────────────────
+// ── Staggered fade-in wrapper ─────────────────────────────────────────────────
+// ui-ux-pro-max: stagger-sequence rule — 30–50ms per item entrance delay
+
+class _FadeIn extends StatefulWidget {
+  const _FadeIn({required this.child, required this.delay});
+  final Widget child;
+  final Duration delay;
+
+  @override
+  State<_FadeIn> createState() => _FadeInState();
+}
+
+class _FadeInState extends State<_FadeIn> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _opacity;
+  late final Animation<Offset> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 380));
+    _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+    _slide = Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
+    Future.delayed(widget.delay, () { if (mounted) _ctrl.forward(); });
+  }
+
+  @override
+  void dispose() { _ctrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+    opacity: _opacity,
+    child: SlideTransition(position: _slide, child: widget.child),
+  );
+}
+
+// ── DashboardScreen ───────────────────────────────────────────────────────────
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -63,12 +101,12 @@ class DashboardScreen extends StatelessWidget {
           padding: EdgeInsets.zero,
           children: const [
             _Header(),
-            _NetWorthHero(),
-            _CycleCard(),
-            _NeedsSection(),
-            _CompaniesSection(),
-            _EventsSection(),
-            _PortfolioCard(),
+            _FadeIn(delay: Duration(milliseconds: 60),  child: _NetWorthHero()),
+            _FadeIn(delay: Duration(milliseconds: 110), child: _CycleCard()),
+            _FadeIn(delay: Duration(milliseconds: 160), child: _NeedsSection()),
+            _FadeIn(delay: Duration(milliseconds: 200), child: _CompaniesSection()),
+            _FadeIn(delay: Duration(milliseconds: 240), child: _EventsSection()),
+            _FadeIn(delay: Duration(milliseconds: 280), child: _PortfolioCard()),
             SizedBox(height: AppSpacing.xl),
           ],
         ),
@@ -77,7 +115,7 @@ class DashboardScreen extends StatelessWidget {
   }
 }
 
-// ── Header ───────────────────────────────────────────────────────────────────
+// ── Header ────────────────────────────────────────────────────────────────────
 
 class _Header extends StatelessWidget {
   const _Header();
@@ -94,40 +132,48 @@ class _Header extends StatelessWidget {
             const SizedBox(height: 2),
             Text('Alex Rivera', style: AppTypography.headingM),
           ]),
-          Stack(clipBehavior: Clip.none, children: [
-            Container(
-              width: 40, height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.bgSurface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.borderSubtle),
-              ),
-              child: const Icon(Icons.notifications_none_rounded, color: AppColors.textPrimary, size: 18),
-            ),
-            Positioned(
-              top: -4, right: -4,
-              child: Container(
-                width: 18, height: 18,
-                decoration: BoxDecoration(
-                  color: AppColors.crimson,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.bgBase, width: 2),
-                ),
-                child: Center(
-                  child: Text('3', style: AppTypography.labelCaps.copyWith(
-                    color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700,
-                  )),
+          // ui-ux-pro-max: Semantics label on icon-only button
+          Semantics(
+            label: '3 unread notifications',
+            button: true,
+            child: Stack(clipBehavior: Clip.none, children: [
+              Pressable(
+                onTap: () {},
+                child: Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.bgSurface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.borderSubtle),
+                  ),
+                  child: const Icon(Icons.notifications_none_rounded, color: AppColors.textPrimary, size: 18),
                 ),
               ),
-            ),
-          ]),
+              Positioned(
+                top: -4, right: -4,
+                child: Container(
+                  width: 18, height: 18,
+                  decoration: BoxDecoration(
+                    color: AppColors.crimson,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.bgBase, width: 2),
+                  ),
+                  child: Center(
+                    child: Text('3', style: AppTypography.labelCaps.copyWith(
+                      color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700,
+                    )),
+                  ),
+                ),
+              ),
+            ]),
+          ),
         ],
       ),
     );
   }
 }
 
-// ── Net Worth Hero ───────────────────────────────────────────────────────────
+// ── Net Worth Hero ────────────────────────────────────────────────────────────
 
 class _NetWorthHero extends StatefulWidget {
   const _NetWorthHero();
@@ -137,7 +183,7 @@ class _NetWorthHero extends StatefulWidget {
 }
 
 class _NetWorthHeroState extends State<_NetWorthHero> with SingleTickerProviderStateMixin {
-  static const int _target = 847320;
+  static const int _target   = 847320;
   static const int _startVal = _target - 12400;
 
   late AnimationController _ctrl;
@@ -182,15 +228,30 @@ class _NetWorthHeroState extends State<_NetWorthHero> with SingleTickerProviderS
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 500),
         decoration: BoxDecoration(
-          color: AppColors.bgSurface,
+          // frontend-design: gradient background for atmosphere + depth
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppColors.bgElevated,
+              AppColors.bgSurface,
+            ],
+          ),
           borderRadius: BorderRadius.circular(AppRadius.hero),
-          border: Border.all(color: AppColors.borderSubtle),
+          border: Border.all(
+            color: _glow
+                ? AppColors.gold.withValues(alpha: 0.35)
+                : AppColors.borderSubtle,
+          ),
+          // ui-ux-pro-max: gold ambient glow on balance increase
           boxShadow: _glow
               ? [
-                  BoxShadow(color: AppColors.gold.withOpacity(0.18), blurRadius: 50),
-                  BoxShadow(color: AppColors.gold.withOpacity(0.07), blurRadius: 100),
+                  BoxShadow(color: AppColors.gold.withValues(alpha: 0.18), blurRadius: 50),
+                  BoxShadow(color: AppColors.gold.withValues(alpha: 0.07), blurRadius: 100),
                 ]
-              : [],
+              : [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 20, offset: const Offset(0, 4)),
+                ],
         ),
         child: Stack(clipBehavior: Clip.none, children: [
           Padding(
@@ -198,17 +259,20 @@ class _NetWorthHeroState extends State<_NetWorthHero> with SingleTickerProviderS
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('Net Worth', style: AppTypography.labelCaps),
               const SizedBox(height: AppSpacing.sm),
-              AnimatedBuilder(
-                animation: _anim,
-                builder: (_, __) {
-                  final val = (_startVal + (_target - _startVal) * _anim.value).round();
-                  return RichText(
-                    text: TextSpan(children: [
-                      TextSpan(text: '\$ ', style: AppTypography.displayXL.copyWith(color: AppColors.gold)),
-                      TextSpan(text: NumberFormat.decimalPattern().format(val), style: AppTypography.displayXL),
-                    ]),
-                  );
-                },
+              // RepaintBoundary isolates the animating number from the rest
+              RepaintBoundary(
+                child: AnimatedBuilder(
+                  animation: _anim,
+                  builder: (_, __) {
+                    final val = (_startVal + (_target - _startVal) * _anim.value).round();
+                    return RichText(
+                      text: TextSpan(children: [
+                        TextSpan(text: '\$ ', style: AppTypography.displayXL.copyWith(color: AppColors.gold)),
+                        TextSpan(text: NumberFormat.decimalPattern().format(val), style: AppTypography.displayXL),
+                      ]),
+                    );
+                  },
+                ),
               ),
               const SizedBox(height: AppSpacing.md),
               Container(
@@ -216,7 +280,7 @@ class _NetWorthHeroState extends State<_NetWorthHero> with SingleTickerProviderS
                 decoration: BoxDecoration(
                   color: AppColors.emeraldSurface,
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: AppColors.emerald.withOpacity(0.2)),
+                  border: Border.all(color: AppColors.emerald.withValues(alpha: 0.2)),
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   const Icon(Icons.arrow_upward, color: AppColors.emerald, size: 10),
@@ -239,19 +303,26 @@ class _NetWorthHeroState extends State<_NetWorthHero> with SingleTickerProviderS
               ]),
             ]),
           ),
-          if (_showToast)
-            Positioned(
-              top: 18, right: 18,
+          // Income toast
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
+            top: _showToast ? 14 : 4,
+            right: 14,
+            child: AnimatedOpacity(
+              opacity: _showToast ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 200),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                 decoration: BoxDecoration(
-                  color: AppColors.emerald.withOpacity(0.15),
+                  color: AppColors.emerald.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.emerald.withOpacity(0.3)),
+                  border: Border.all(color: AppColors.emerald.withValues(alpha: 0.3)),
                 ),
                 child: Text('+\$ 1,200', style: AppTypography.dataS.copyWith(color: AppColors.emerald)),
               ),
             ),
+          ),
         ]),
       ),
     );
@@ -281,7 +352,7 @@ class _StatDivider extends StatelessWidget {
   }
 }
 
-// ── Cycle Card ───────────────────────────────────────────────────────────────
+// ── Cycle Card ────────────────────────────────────────────────────────────────
 
 class _CycleCard extends StatefulWidget {
   const _CycleCard();
@@ -324,45 +395,48 @@ class _CycleCardState extends State<_CycleCard> {
     final timerColor = _low ? AppColors.amber : AppColors.textPrimary;
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.screenH, 0, AppSpacing.screenH, AppSpacing.md),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 600),
-        decoration: BoxDecoration(
-          color: AppColors.bgSurface,
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: _low ? AppColors.amber.withOpacity(0.5) : AppColors.borderSubtle),
-          boxShadow: _low ? [BoxShadow(color: AppColors.amber.withOpacity(0.08), blurRadius: 24)] : [],
-        ),
-        padding: const EdgeInsets.all(16),
-        child: Column(children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Row(children: [
-              Icon(Icons.access_time, size: 14, color: _low ? AppColors.amber : AppColors.textSecondary),
-              const SizedBox(width: 6),
-              Text('Next Settlement', style: AppTypography.labelCaps),
+      // RepaintBoundary: timer ticks every second; isolate repaints from siblings
+      child: RepaintBoundary(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 600),
+          decoration: BoxDecoration(
+            color: AppColors.bgSurface,
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(color: _low ? AppColors.amber.withValues(alpha: 0.5) : AppColors.borderSubtle),
+            boxShadow: _low ? [BoxShadow(color: AppColors.amber.withValues(alpha: 0.08), blurRadius: 24)] : [],
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Column(children: [
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Row(children: [
+                Icon(Icons.access_time, size: 14, color: _low ? AppColors.amber : AppColors.textSecondary),
+                const SizedBox(width: 6),
+                Text('Next Settlement', style: AppTypography.labelCaps),
+              ]),
+              Text(_label, style: AppTypography.dataM.copyWith(fontSize: 19, color: timerColor)),
             ]),
-            Text(_label, style: AppTypography.dataM.copyWith(fontSize: 19, color: timerColor)),
-          ]),
-          const SizedBox(height: AppSpacing.md),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(2),
-            child: SizedBox(
-              height: 4,
-              child: LinearProgressIndicator(
-                value: _pct,
-                backgroundColor: AppColors.bgInput,
-                valueColor: AlwaysStoppedAnimation(_low ? AppColors.amber : AppColors.gold),
+            const SizedBox(height: AppSpacing.md),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: SizedBox(
+                height: 4,
+                child: LinearProgressIndicator(
+                  value: _pct,
+                  backgroundColor: AppColors.bgInput,
+                  valueColor: AlwaysStoppedAnimation(_low ? AppColors.amber : AppColors.gold),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          const Row(children: [
-            _CycleStat(label: 'Salary', val: '\$ 12,200', positive: true),
-            SizedBox(width: 14),
-            _CycleStat(label: 'Rent',   val: '\$ 4,500',  positive: false),
-            SizedBox(width: 14),
-            _CycleStat(label: 'Loan',   val: '\$ 1,200',  positive: false),
+            const SizedBox(height: AppSpacing.md),
+            const Row(children: [
+              _CycleStat(label: 'Salary', val: '\$ 12,200', positive: true),
+              SizedBox(width: 14),
+              _CycleStat(label: 'Rent',   val: '\$ 4,500',  positive: false),
+              SizedBox(width: 14),
+              _CycleStat(label: 'Loan',   val: '\$ 1,200',  positive: false),
+            ]),
           ]),
-        ]),
+        ),
       ),
     );
   }
@@ -410,7 +484,7 @@ class _NeedsSectionState extends State<_NeedsSection> {
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
             child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               Text('My Needs', style: AppTypography.labelCaps),
-              GestureDetector(
+              Pressable(
                 onTap: () => setState(() => _expanded = !_expanded),
                 child: Text(
                   _expanded ? 'Collapse' : 'See all',
@@ -444,6 +518,7 @@ class _NeedRow extends StatelessWidget {
     return Column(children: [
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
         Row(children: [
+          // Needs use emoji as decorative content indicators, not structural icons — acceptable
           Text(need.icon, style: const TextStyle(fontSize: 13)),
           const SizedBox(width: 6),
           Text(need.label, style: AppTypography.bodyS.copyWith(
@@ -455,7 +530,7 @@ class _NeedRow extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
               decoration: BoxDecoration(
-                color: AppColors.crimson.withOpacity(0.15),
+                color: AppColors.crimson.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text('CRITICAL', style: AppTypography.labelCaps.copyWith(
@@ -465,8 +540,9 @@ class _NeedRow extends StatelessWidget {
           ],
         ]),
         Row(children: [
-          if (need.trend == 'down') const Icon(Icons.arrow_downward, size: 9, color: AppColors.crimson),
-          if (need.trend == 'up')   const Icon(Icons.arrow_upward,   size: 9, color: AppColors.emerald),
+          // ui-ux-pro-max: color-not-only — add icon alongside color to convey trend
+          if (need.trend == 'down') const Icon(Icons.trending_down, size: 12, color: AppColors.crimson),
+          if (need.trend == 'up')   const Icon(Icons.trending_up,   size: 12, color: AppColors.emerald),
           const SizedBox(width: 4),
           Text('${need.val}%', style: AppTypography.dataS.copyWith(fontSize: 12, color: c)),
         ]),
@@ -487,7 +563,7 @@ class _NeedRow extends StatelessWidget {
   }
 }
 
-// ── Companies Section ────────────────────────────────────────────────────────
+// ── Companies Section ─────────────────────────────────────────────────────────
 
 class _CompaniesSection extends StatelessWidget {
   const _CompaniesSection();
@@ -504,6 +580,7 @@ class _CompaniesSection extends StatelessWidget {
       ),
       SizedBox(
         height: 160,
+        // Flutter skill: ListView for horizontal scroll is fine here (small fixed list)
         child: ListView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenH),
@@ -512,7 +589,7 @@ class _CompaniesSection extends StatelessWidget {
               _CompanyCard(co: co),
               const SizedBox(width: 12),
             ],
-            _AddCompanyCard(),
+            const _AddCompanyCard(),
           ],
         ),
       ),
@@ -521,39 +598,38 @@ class _CompaniesSection extends StatelessWidget {
   }
 }
 
-class _CompanyCard extends StatefulWidget {
+class _CompanyCard extends StatelessWidget {
   const _CompanyCard({required this.co});
   final _CompanyData co;
-  @override
-  State<_CompanyCard> createState() => _CompanyCardState();
-}
-
-class _CompanyCardState extends State<_CompanyCard> {
-  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
-    final co = widget.co;
     final isWarning = co.status == 'warning';
     final pos = co.revenue >= 0;
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTapCancel: () => setState(() => _pressed = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+
+    return Pressable(
+      onTap: () {},
+      semanticLabel: '${co.name}, ${co.type}, ${pos ? "profit" : "loss"} this cycle',
+      child: Container(
         width: 186,
-        transform: Matrix4.translationValues(0, _pressed ? -3 : 0, 0),
         decoration: BoxDecoration(
-          color: AppColors.bgSurface,
+          // frontend-design: gradient gives depth, not flat surface
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isWarning
+                ? [AppColors.bgElevated, AppColors.bgSurface]
+                : [AppColors.bgSurface, AppColors.bgBase],
+          ),
           borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: isWarning ? AppColors.amber.withOpacity(0.4) : AppColors.borderSubtle),
-          boxShadow: _pressed ? [
-            BoxShadow(
-              color: (isWarning ? AppColors.amber : Colors.black).withOpacity(0.15),
-              blurRadius: 24, offset: const Offset(0, 8),
-            ),
-          ] : [],
+          border: Border.all(
+            color: isWarning
+                ? AppColors.amber.withValues(alpha: 0.45)
+                : AppColors.borderSubtle,
+          ),
+          boxShadow: isWarning
+              ? [BoxShadow(color: AppColors.amber.withValues(alpha: 0.06), blurRadius: 16)]
+              : [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 12, offset: const Offset(0, 3))],
         ),
         padding: const EdgeInsets.all(14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -564,8 +640,9 @@ class _CompanyCardState extends State<_CompanyCard> {
               Text(co.name, style: AppTypography.bodyS.copyWith(fontWeight: FontWeight.w600, color: AppColors.textPrimary, fontSize: 13)),
               Text(co.type, style: AppTypography.labelCaps.copyWith(fontSize: 11)),
             ]),
+            // ui-ux-pro-max: replace emoji ⚠️ with proper icon
             if (isWarning)
-              const Text('⚠️', style: TextStyle(fontSize: 13))
+              const Icon(Icons.warning_amber_rounded, color: AppColors.amber, size: 16)
             else
               Container(
                 width: 8, height: 8,
@@ -573,7 +650,7 @@ class _CompanyCardState extends State<_CompanyCard> {
                 decoration: BoxDecoration(
                   color: AppColors.emerald,
                   shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: AppColors.emerald.withOpacity(0.6), blurRadius: 7)],
+                  boxShadow: [BoxShadow(color: AppColors.emerald.withValues(alpha: 0.6), blurRadius: 7)],
                 ),
               ),
           ]),
@@ -584,7 +661,12 @@ class _CompanyCardState extends State<_CompanyCard> {
           ),
           Text('this cycle', style: AppTypography.labelCaps.copyWith(fontSize: 11)),
           const Divider(color: AppColors.bgInput, height: 20),
-          Text('👥 ${co.employees} staff', style: AppTypography.labelCaps.copyWith(fontSize: 11)),
+          // ui-ux-pro-max: replace 👥 emoji with Material icon
+          Row(children: [
+            const Icon(Icons.people_outline, size: 12, color: AppColors.textTertiary),
+            const SizedBox(width: 4),
+            Text('${co.employees} staff', style: AppTypography.labelCaps.copyWith(fontSize: 11)),
+          ]),
         ]),
       ),
     );
@@ -592,28 +674,34 @@ class _CompanyCardState extends State<_CompanyCard> {
 }
 
 class _AddCompanyCard extends StatelessWidget {
+  const _AddCompanyCard();
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 150,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.borderDefault),
-      ),
-      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Container(
-          width: 32, height: 32,
-          decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: AppColors.borderStrong)),
-          child: const Icon(Icons.add, color: AppColors.textTertiary, size: 18),
+    return Pressable(
+      onTap: () {},
+      semanticLabel: 'Create a new company',
+      child: Container(
+        width: 150,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: AppColors.borderDefault),
         ),
-        const SizedBox(height: 8),
-        Text('New company', style: AppTypography.labelCaps.copyWith(fontSize: 11), textAlign: TextAlign.center),
-      ]),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Container(
+            width: 32, height: 32,
+            decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: AppColors.borderStrong)),
+            child: const Icon(Icons.add, color: AppColors.textTertiary, size: 18),
+          ),
+          const SizedBox(height: 8),
+          Text('New company', style: AppTypography.labelCaps.copyWith(fontSize: 11), textAlign: TextAlign.center),
+        ]),
+      ),
     );
   }
 }
 
-// ── Events Section ───────────────────────────────────────────────────────────
+// ── Events Section ────────────────────────────────────────────────────────────
 
 class _EventsSection extends StatelessWidget {
   const _EventsSection();
@@ -647,54 +735,62 @@ class _EventCard extends StatelessWidget {
     final severityColor = isMajor ? AppColors.amber : AppColors.sky;
     return Opacity(
       opacity: event.affectsMe ? 1.0 : 0.55,
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.bgSurface,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: event.affectsMe ? AppColors.amber.withOpacity(0.35) : AppColors.borderSubtle,
+      child: Pressable(
+        onTap: () {},
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.bgSurface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: event.affectsMe ? AppColors.amber.withValues(alpha: 0.35) : AppColors.borderSubtle,
+            ),
           ),
-        ),
-        padding: const EdgeInsets.all(12),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: severityColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(4),
+          padding: const EdgeInsets.all(12),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: severityColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(event.severity.toUpperCase(), style: AppTypography.labelCaps.copyWith(
+                    color: severityColor, fontSize: 9, fontWeight: FontWeight.w700,
+                  )),
                 ),
-                child: Text(event.severity.toUpperCase(), style: AppTypography.labelCaps.copyWith(
-                  color: severityColor, fontSize: 9, fontWeight: FontWeight.w700,
-                )),
-              ),
-              const SizedBox(width: 6),
-              Text(event.scope, style: AppTypography.labelCaps.copyWith(fontSize: 11)),
-            ]),
-            const SizedBox(height: 5),
-            Text(event.title, style: AppTypography.bodyS.copyWith(
-              fontWeight: FontWeight.w600,
-              color: event.affectsMe ? AppColors.textPrimary : AppColors.textSecondary,
-              fontSize: 13,
-            )),
-            if (event.affectsMe) ...[
-              const SizedBox(height: 3),
-              Text('⚠ Affecting your companies', style: AppTypography.labelCaps.copyWith(
-                color: AppColors.amber, fontSize: 11,
+                const SizedBox(width: 6),
+                Text(event.scope, style: AppTypography.labelCaps.copyWith(fontSize: 11)),
+              ]),
+              const SizedBox(height: 5),
+              Text(event.title, style: AppTypography.bodyS.copyWith(
+                fontWeight: FontWeight.w600,
+                color: event.affectsMe ? AppColors.textPrimary : AppColors.textSecondary,
+                fontSize: 13,
               )),
-            ],
-          ])),
-          const SizedBox(width: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(color: AppColors.bgElevated, borderRadius: BorderRadius.circular(6)),
-            child: Column(children: [
-              Text('${event.cyclesLeft}', style: AppTypography.dataM.copyWith(fontSize: 15)),
-              Text('cycles', style: AppTypography.labelCaps.copyWith(fontSize: 9)),
-            ]),
-          ),
-        ]),
+              if (event.affectsMe) ...[
+                const SizedBox(height: 3),
+                // ui-ux-pro-max: replace ⚠ emoji with icon
+                Row(children: [
+                  const Icon(Icons.warning_amber_rounded, size: 11, color: AppColors.amber),
+                  const SizedBox(width: 4),
+                  Text('Affecting your companies', style: AppTypography.labelCaps.copyWith(
+                    color: AppColors.amber, fontSize: 11,
+                  )),
+                ]),
+              ],
+            ])),
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(color: AppColors.bgElevated, borderRadius: BorderRadius.circular(6)),
+              child: Column(children: [
+                Text('${event.cyclesLeft}', style: AppTypography.dataM.copyWith(fontSize: 15)),
+                Text('cycles', style: AppTypography.labelCaps.copyWith(fontSize: 9)),
+              ]),
+            ),
+          ]),
+        ),
       ),
     );
   }
@@ -709,35 +805,41 @@ class _PortfolioCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.screenH, 0, AppSpacing.screenH, AppSpacing.sm),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.bgSurface,
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: AppColors.borderSubtle),
-        ),
-        padding: const EdgeInsets.all(16),
-        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Portfolio', style: AppTypography.labelCaps),
-            const SizedBox(height: 6),
-            RichText(text: TextSpan(children: [
-              TextSpan(text: '\$ ', style: AppTypography.dataL.copyWith(color: AppColors.gold)),
-              const TextSpan(text: '120,400', style: TextStyle(
-                fontFamily: 'DM Mono', fontSize: 20, fontWeight: FontWeight.w500,
-                color: AppColors.textPrimary,
-              )),
-            ])),
-            const SizedBox(height: 5),
-            Row(children: [
-              Text('+2.4%', style: AppTypography.dataS.copyWith(color: AppColors.emerald, fontSize: 12)),
-              const SizedBox(width: 4),
-              const Icon(Icons.arrow_upward, size: 9, color: AppColors.emerald),
-              const SizedBox(width: 4),
-              Text('this cycle · 3 positions', style: AppTypography.labelCaps.copyWith(fontSize: 11)),
+      child: Pressable(
+        onTap: () {},
+        semanticLabel: 'Portfolio value 120,400 dollars, up 2.4 percent',
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.bgSurface,
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(color: AppColors.borderSubtle),
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Portfolio', style: AppTypography.labelCaps),
+              const SizedBox(height: 6),
+              RichText(text: TextSpan(children: [
+                TextSpan(text: '\$ ', style: AppTypography.dataL.copyWith(color: AppColors.gold)),
+                const TextSpan(text: '120,400', style: TextStyle(
+                  fontFamily: 'DMSans', fontSize: 20, fontWeight: FontWeight.w500,
+                  color: AppColors.textPrimary,
+                )),
+              ])),
+              const SizedBox(height: 5),
+              Row(children: [
+                Text('+2.4%', style: AppTypography.dataS.copyWith(color: AppColors.emerald, fontSize: 12)),
+                const SizedBox(width: 4),
+                const Icon(Icons.trending_up, size: 12, color: AppColors.emerald),
+                const SizedBox(width: 4),
+                Text('this cycle · 3 positions', style: AppTypography.labelCaps.copyWith(fontSize: 11)),
+              ]),
             ]),
+            const RepaintBoundary(
+              child: CustomPaint(size: Size(72, 32), painter: _SparklinePainter()),
+            ),
           ]),
-          const CustomPaint(size: Size(72, 32), painter: _SparklinePainter()),
-        ]),
+        ),
       ),
     );
   }
@@ -779,7 +881,7 @@ class _SparklinePainter extends CustomPainter {
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [AppColors.emerald.withOpacity(0.35), AppColors.emerald.withOpacity(0)],
+          colors: [AppColors.emerald.withValues(alpha: 0.35), AppColors.emerald.withValues(alpha: 0)],
         ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
     );
   }

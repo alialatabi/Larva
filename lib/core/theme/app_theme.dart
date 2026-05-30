@@ -24,7 +24,7 @@ class AppTheme {
       titleTextStyle: AppTypography.headingM,
       iconTheme: const IconThemeData(color: AppColors.textPrimary),
     ),
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       color: AppColors.bgSurface,
       elevation: 0,
       shape: RoundedRectangleBorder(
