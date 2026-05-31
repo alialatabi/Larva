@@ -30,7 +30,7 @@ Repeatable slice: `table → RLS → realtime → StreamProvider → ConsumerWid
 - [x] Needs Detail — `larva_core.player_needs`
 - [x] Skills Map (25 skills, 3 tiers) — `larva_core.skills` + `player_skills`
 - [ ] Jobs — Find Work + My Career (still mock; needs `larva_economy` job listings + employment, populated by §3–4)
-- [ ] Dashboard — player snapshot, company summary, net worth, cycle countdown
+- [x] Dashboard — live name (`players`), net-worth hero (wallet-driven count-up + glow), needs (`player_needs`), companies (`larva_economy`), events (`larva_world`), portfolio (`larva_market`). Cycle countdown still a local timer (needs the cycle engine, §4); notification badge + cycle salary/rent figures still mock.
 - [ ] Empire — Company List
 - [ ] Company Detail — Overview tab
 - [ ] Company Detail — Employees tab
@@ -128,6 +128,7 @@ Each also needs Flutter optimistic-UI wiring (action → function → confirm / 
 
 ## Changelog
 
+- **2026-06-01** — Wired **Dashboard** to live data across 4 schemas: header name (`larva_core.players`), net-worth hero driven by the live wallet (count-up + gold glow on increase, replacing the fake repeating timer), needs (`player_needs`), companies (`larva_economy.companies` + type embed), events (`larva_world.events`), portfolio (`larva_market.holdings` × last price). Honest live empty states for the (still-empty) economy tables; mock kept as no-session preview. Cycle card left as a local timer (needs the engine). `dart analyze` clean; provider queries (incl. cross-FK embeds) verified 200/0-rows via REST.
 - **2026-05-31** — Wired **Profile** to live `larva_core` data (first slice against a canonical exposed schema): hub identity/cycles/company-count/net-worth, Needs Detail (`player_needs`), Skills Map (`skills` + `player_skills`, embed query). `FutureProvider`s via `supabase.schema('larva_core')` (larva_* not in realtime publication, and profile data only changes per cycle). Dev user seeded (cycle 47, 7 needs, 25 skills). Jobs tab still mock. `dart analyze` clean.
 - **2026-05-31** — Exposed all 8 `larva_*` schemas to the API: migration `009` grants USAGE/SELECT to anon+authenticated (+ default privileges) and hardens RLS on the country reference tables; PostgREST `db_schema` config patched via Management API. Verified: reference tables readable, `larva_admin` locked tables return 0 rows to anon. Client must use `.schema('<name>')` to query non-public schemas.
 - **2026-05-31** — Full canonical database schema written + applied (`005`–`008`): all 8 `larva_*` namespaces, 47 tables, with reference data seeded (18 countries + modifiers/resources/specializations, 25 skills, 9+1 sectors, 30 company types, partner tiers, loan products, 12 config keys). Structure-only — not API-exposed, not yet gameplay-populated. §2 complete.

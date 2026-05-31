@@ -575,17 +575,38 @@ class _NeedRow extends StatelessWidget {
 
 // ── Companies Section ─────────────────────────────────────────────────────────
 
-class _CompaniesSection extends StatelessWidget {
+class _CompaniesSection extends ConsumerWidget {
   const _CompaniesSection();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final live = ref.watch(dashboardCompaniesProvider).asData?.value; // null = preview
+    final isLive = live != null;
+    final companies = live == null
+        ? _companies
+        : [
+            for (final c in live)
+              _CompanyData(
+                id: c.name.hashCode,
+                name: c.name,
+                type: c.typeName,
+                revenue: 0, // per-cycle profit comes from the reconciliation engine
+                employees: 0,
+                status: c.status == 'active' ? 'good' : 'warning',
+                icon: '🏢',
+              ),
+          ];
+
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(AppSpacing.screenH, 0, AppSpacing.screenH, AppSpacing.md),
         child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text('Companies', style: AppTypography.labelCaps),
-          Text('${_companies.length} total →', style: AppTypography.label.copyWith(color: AppColors.gold)),
+          Row(children: [
+            Text('Companies', style: AppTypography.labelCaps),
+            const SizedBox(width: 8),
+            _livePill(isLive),
+          ]),
+          Text('${companies.length} total →', style: AppTypography.label.copyWith(color: AppColors.gold)),
         ]),
       ),
       SizedBox(
@@ -595,7 +616,7 @@ class _CompaniesSection extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenH),
           children: [
-            for (final co in _companies) ...[
+            for (final co in companies) ...[
               _CompanyCard(co: co),
               const SizedBox(width: 12),
             ],
@@ -713,23 +734,60 @@ class _AddCompanyCard extends StatelessWidget {
 
 // ── Events Section ────────────────────────────────────────────────────────────
 
-class _EventsSection extends StatelessWidget {
+class _EventsSection extends ConsumerWidget {
   const _EventsSection();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final live = ref.watch(activeEventsProvider).asData?.value; // null = preview
+    final isLive = live != null;
+    final events = live == null
+        ? _events
+        : [
+            for (final e in live)
+              _EventData(
+                id: e.title.hashCode,
+                title: e.title,
+                scope: e.scope.isEmpty ? '' : e.scope[0].toUpperCase() + e.scope.substring(1),
+                severity: e.severity,
+                cyclesLeft: e.cyclesLeft,
+                affectsMe: e.affectsMe,
+              ),
+          ];
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.screenH, 0, AppSpacing.screenH, AppSpacing.md),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text('Active Events', style: AppTypography.labelCaps),
+          Row(children: [
+            Text('Active Events', style: AppTypography.labelCaps),
+            const SizedBox(width: 8),
+            _livePill(isLive),
+          ]),
           Text('See all →', style: AppTypography.label.copyWith(color: AppColors.gold)),
         ]),
         const SizedBox(height: AppSpacing.md),
-        for (final ev in _events) ...[
-          _EventCard(event: ev),
-          const SizedBox(height: AppSpacing.sm),
-        ],
+        if (isLive && events.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            decoration: BoxDecoration(
+              color: AppColors.bgSurface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.borderSubtle),
+            ),
+            child: Column(children: [
+              const Icon(Icons.event_available_outlined, color: AppColors.textTertiary, size: 26),
+              const SizedBox(height: 8),
+              Text('No active events — the economy is calm.',
+                  style: AppTypography.bodyS.copyWith(fontSize: 12), textAlign: TextAlign.center),
+            ]),
+          )
+        else
+          for (final ev in events) ...[
+            _EventCard(event: ev),
+            const SizedBox(height: AppSpacing.sm),
+          ],
       ]),
     );
   }
@@ -808,16 +866,21 @@ class _EventCard extends StatelessWidget {
 
 // ── Portfolio Card ────────────────────────────────────────────────────────────
 
-class _PortfolioCard extends StatelessWidget {
+class _PortfolioCard extends ConsumerWidget {
   const _PortfolioCard();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final live = ref.watch(portfolioValueProvider).asData?.value; // null = preview
+    final isLive = live != null;
+    final value = live ?? 120400;
+    final hasPositions = !isLive || value > 0; // preview shows mock; live-empty shows none
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.screenH, 0, AppSpacing.screenH, AppSpacing.sm),
       child: Pressable(
         onTap: () {},
-        semanticLabel: 'Portfolio value 120,400 dollars, up 2.4 percent',
+        semanticLabel: 'Portfolio value ${NumberFormat.decimalPattern().format(value)} dollars',
         child: Container(
           decoration: BoxDecoration(
             color: AppColors.bgSurface,
@@ -827,27 +890,35 @@ class _PortfolioCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Portfolio', style: AppTypography.labelCaps),
+              Row(children: [
+                Text('Portfolio', style: AppTypography.labelCaps),
+                const SizedBox(width: 8),
+                _livePill(isLive),
+              ]),
               const SizedBox(height: 6),
               RichText(text: TextSpan(children: [
                 TextSpan(text: '\$ ', style: AppTypography.dataL.copyWith(color: AppColors.gold)),
-                const TextSpan(text: '120,400', style: TextStyle(
+                TextSpan(text: NumberFormat.decimalPattern().format(value), style: const TextStyle(
                   fontFamily: 'DMSans', fontSize: 20, fontWeight: FontWeight.w500,
                   color: AppColors.textPrimary,
                 )),
               ])),
               const SizedBox(height: 5),
-              Row(children: [
-                Text('+2.4%', style: AppTypography.dataS.copyWith(color: AppColors.emerald, fontSize: 12)),
-                const SizedBox(width: 4),
-                const Icon(Icons.trending_up, size: 12, color: AppColors.emerald),
-                const SizedBox(width: 4),
-                Text('this cycle · 3 positions', style: AppTypography.labelCaps.copyWith(fontSize: 11)),
-              ]),
+              if (hasPositions)
+                Row(children: [
+                  Text('+2.4%', style: AppTypography.dataS.copyWith(color: AppColors.emerald, fontSize: 12)),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.trending_up, size: 12, color: AppColors.emerald),
+                  const SizedBox(width: 4),
+                  Text('this cycle · 3 positions', style: AppTypography.labelCaps.copyWith(fontSize: 11)),
+                ])
+              else
+                Text('No positions yet', style: AppTypography.labelCaps.copyWith(fontSize: 11)),
             ]),
-            const RepaintBoundary(
-              child: CustomPaint(size: Size(72, 32), painter: _SparklinePainter()),
-            ),
+            if (hasPositions)
+              const RepaintBoundary(
+                child: CustomPaint(size: Size(72, 32), painter: _SparklinePainter()),
+              ),
           ]),
         ),
       ),
