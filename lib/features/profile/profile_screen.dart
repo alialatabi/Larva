@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import '../finance/wallet_providers.dart';
+import 'profile_providers.dart';
 
 // ── Data models ───────────────────────────────────────────────────────────────
 
 class _Need {
-  const _Need(this.label, this.value, this.action, this.decay, this.icon, this.color);
-  final String label, action, decay, icon;
+  const _Need(this.id, this.label, this.value, this.action, this.decay, this.icon, this.color);
+  final String id, label, action, decay, icon;
   final int value;
   final Color color;
 }
@@ -40,15 +44,71 @@ class _CareerEntry {
 
 // ── Mock data ─────────────────────────────────────────────────────────────────
 
+// Mock needs: presentation descriptors (icon/action/decay/colour) + fallback
+// values. Live values come from playerNeedsProvider, matched by id.
 const _needs = <_Need>[
-  _Need('Hunger',    82, 'Buy food',      '−6 / cycle', '🍽', AppColors.needHunger),
-  _Need('Energy',    61, 'Rest',          '−9 / cycle', '⚡', AppColors.needEnergy),
-  _Need('Health',    88, 'Visit clinic',  '−3 / cycle', '❤️', AppColors.needHealth),
-  _Need('Happiness', 71, 'Leisure',       '−5 / cycle', '😊', AppColors.needHappiness),
-  _Need('Housing',   90, 'Pay rent',      '−2 / cycle', '🏠', AppColors.needHousing),
-  _Need('Transport', 85, 'Fuel / fare',   '−4 / cycle', '🚗', AppColors.needTransport),
-  _Need('Ambition',  65, 'Hit your goals','−5 / cycle', '🔥', AppColors.needAmbition),
+  _Need('hunger',         'Hunger',    82, 'Buy food',      '−6 / cycle', '🍽', AppColors.needHunger),
+  _Need('energy',         'Energy',    61, 'Rest',          '−9 / cycle', '⚡', AppColors.needEnergy),
+  _Need('health',         'Health',    88, 'Visit clinic',  '−3 / cycle', '❤️', AppColors.needHealth),
+  _Need('happiness',      'Happiness', 71, 'Leisure',       '−5 / cycle', '😊', AppColors.needHappiness),
+  _Need('housing',        'Housing',   90, 'Pay rent',      '−2 / cycle', '🏠', AppColors.needHousing),
+  _Need('transportation', 'Transport', 85, 'Fuel / fare',   '−4 / cycle', '🚗', AppColors.needTransport),
+  _Need('drive',          'Ambition',  65, 'Hit your goals','−5 / cycle', '🔥', AppColors.needAmbition),
 ];
+
+// Overlay live need values onto the presentation descriptors (or fall back).
+List<_Need> _resolveNeeds(PlayerNeedsData? live) {
+  if (live == null) return _needs;
+  return [
+    for (final n in _needs)
+      _Need(n.id, n.label, live.values[n.id] ?? n.value, n.action, n.decay, n.icon, n.color),
+  ];
+}
+
+const _tierMeta = <String, (String, String)>{
+  'foundation':  ('Foundation', 'Universal · develop through any work'),
+  'free_domain': ('Domain — Open', 'Freely accessible specialisations'),
+  'gated_domain':('Domain — Gated', 'Require a foundational course to unlock'),
+};
+
+// Build the grouped skill map from live player skills (or fall back to mock).
+List<_SkillGroup> _resolveSkillGroups(List<PlayerSkill>? live) {
+  if (live == null || live.isEmpty) return _skillGroups;
+  List<_Skill> forTier(String tier) =>
+      live.where((s) => s.tier == tier).map((s) => _Skill(
+            s.name, s.level,
+            locked: !s.unlocked,
+            prereq: s.unlocked ? null : s.prerequisite,
+          )).toList()
+        ..sort((a, b) {
+          if (a.locked != b.locked) return a.locked ? 1 : -1; // locked last
+          return b.level.compareTo(a.level);
+        });
+  return [
+    for (final tier in const ['foundation', 'free_domain', 'gated_domain'])
+      _SkillGroup(_tierMeta[tier]!.$1, _tierMeta[tier]!.$2, forTier(tier)),
+  ];
+}
+
+String _titleCase(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+
+// Live (signed-in real data) vs Preview (debug/no session → mock fallback).
+Widget _livePill(bool live) {
+  final c = live ? AppColors.emerald : AppColors.amber;
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+    decoration: BoxDecoration(
+      color: c.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: c.withValues(alpha: 0.3)),
+    ),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Container(width: 5, height: 5, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
+      const SizedBox(width: 5),
+      Text(live ? 'Live' : 'Preview', style: AppTypography.label.copyWith(color: c, fontSize: 10, fontWeight: FontWeight.w600)),
+    ]),
+  );
+}
 
 const _skillGroups = <_SkillGroup>[
   _SkillGroup('Foundation', 'Universal · develop through any work', [
@@ -137,14 +197,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
 // ── Hub ───────────────────────────────────────────────────────────────────────
 
-class _ProfileHub extends StatelessWidget {
+class _ProfileHub extends ConsumerWidget {
   const _ProfileHub({required this.onOpen});
   final void Function(_ProfileView) onOpen;
 
   @override
-  Widget build(BuildContext context) {
-    final avgNeed = _needs.fold(0, (s, n) => s + n.value) ~/ _needs.length;
-    final lowestNeed = _needs.reduce((a, b) => a.value < b.value ? a : b);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(playerProfileProvider).asData?.value;
+    final countryNames = ref.watch(countryNamesProvider).asData?.value ?? const {};
+    final companyCount = ref.watch(playerCompanyCountProvider).asData?.value;
+    final walletBal = ref.watch(walletBalanceProvider).asData?.value;
+    final needs = _resolveNeeds(ref.watch(playerNeedsProvider).asData?.value);
+    final skills = ref.watch(playerSkillsProvider).asData?.value;
+
+    final avgNeed = needs.fold(0, (s, n) => s + n.value) ~/ needs.length;
+    final lowestNeed = needs.reduce((a, b) => a.value < b.value ? a : b);
+
+    final name = profile?.displayName ?? 'Alex Rivera';
+    final countryName = profile == null
+        ? 'Caedoria'
+        : (countryNames[profile.countryId] ?? _titleCase(profile.countryId));
+    final standing = profile == null ? 'Entrepreneur' : (profile.isPartner ? 'Partner' : 'Independent');
+    final cyclesVal = profile?.cycleCount.toString() ?? '47';
+    final companiesVal = companyCount?.toString() ?? '3';
+    final netWorthVal = walletBal != null ? '\$ ${NumberFormat.compact().format(walletBal)}' : '\$847K';
+
+    // Strongest unlocked skill for the Skills card subtitle.
+    final strongest = (skills == null || skills.isEmpty)
+        ? null
+        : skills.where((s) => s.unlocked).fold<PlayerSkill?>(
+            null, (best, s) => best == null || s.level > best.level ? s : best);
+    final skillsSubtitle = strongest == null
+        ? '25 skills · Management is your strongest at 72'
+        : '25 skills · ${strongest.name} is your strongest at ${strongest.level}';
 
     return ListView(padding: const EdgeInsets.all(AppSpacing.screenH), children: [
       const SizedBox(height: AppSpacing.md),
@@ -159,8 +244,12 @@ class _ProfileHub extends StatelessWidget {
         child: const Center(child: Text('🧑', style: TextStyle(fontSize: 36))),
       )),
       const SizedBox(height: 12),
-      Center(child: Text('Alex Rivera', style: AppTypography.displayM.copyWith(fontSize: 22))),
-      Center(child: Text('Level 4 Entrepreneur · Caedoria', style: AppTypography.labelCaps.copyWith(fontSize: 11))),
+      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Text(name, style: AppTypography.displayM.copyWith(fontSize: 22)),
+        const SizedBox(width: 8),
+        _livePill(profile != null),
+      ]),
+      Center(child: Text('$standing · $countryName', style: AppTypography.labelCaps.copyWith(fontSize: 11))),
       const SizedBox(height: AppSpacing.x2l),
 
       // Stats strip
@@ -171,10 +260,10 @@ class _ProfileHub extends StatelessWidget {
           border: Border.all(color: AppColors.borderSubtle),
         ),
         padding: const EdgeInsets.all(16),
-        child: const Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-          _StatPill(label: 'Cycles', val: '47'),
-          _StatPill(label: 'Companies', val: '3'),
-          _StatPill(label: 'Net Worth', val: '\$847K', color: AppColors.gold),
+        child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+          _StatPill(label: 'Cycles', val: cyclesVal),
+          _StatPill(label: 'Companies', val: companiesVal),
+          _StatPill(label: 'Net Worth', val: netWorthVal, color: AppColors.gold),
         ]),
       ),
       const SizedBox(height: 14),
@@ -189,7 +278,7 @@ class _ProfileHub extends StatelessWidget {
       const SizedBox(height: 10),
       _NavCard(
         icon: Icons.auto_graph, color: AppColors.sky,
-        title: 'Skills Map', subtitle: '25 skills · Management is your strongest at 72',
+        title: 'Skills Map', subtitle: skillsSubtitle,
         onTap: () => onOpen(_ProfileView.skills),
       ),
       const SizedBox(height: 10),
@@ -327,9 +416,10 @@ class _RingBadge extends StatelessWidget {
 // ── Sub-screen header ─────────────────────────────────────────────────────────
 
 class _SubHeader extends StatelessWidget {
-  const _SubHeader({required this.title, required this.onBack});
+  const _SubHeader({required this.title, required this.onBack, this.trailing});
   final String title;
   final VoidCallback onBack;
+  final Widget? trailing;
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -346,6 +436,7 @@ class _SubHeader extends StatelessWidget {
         ),
         const SizedBox(width: 12),
         Text(title, style: AppTypography.headingL.copyWith(fontSize: 18)),
+        if (trailing != null) ...[const Spacer(), trailing!],
       ]),
     );
   }
@@ -353,15 +444,18 @@ class _SubHeader extends StatelessWidget {
 
 // ── Needs Detail ──────────────────────────────────────────────────────────────
 
-class _NeedsDetail extends StatelessWidget {
+class _NeedsDetail extends ConsumerWidget {
   const _NeedsDetail({required this.onBack});
   final VoidCallback onBack;
 
   @override
-  Widget build(BuildContext context) {
-    final avg = _needs.fold(0, (s, n) => s + n.value) ~/ _needs.length;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(playerNeedsProvider);
+    final isLive = async.asData?.value != null;
+    final needs = _resolveNeeds(async.asData?.value);
+    final avg = needs.fold(0, (s, n) => s + n.value) ~/ needs.length;
     return Column(children: [
-      _SubHeader(title: 'My Needs', onBack: onBack),
+      _SubHeader(title: 'My Needs', onBack: onBack, trailing: _livePill(isLive)),
       Expanded(child: ListView(padding: const EdgeInsets.all(AppSpacing.screenH), children: [
         // Overall wellbeing
         Container(
@@ -384,7 +478,7 @@ class _NeedsDetail extends StatelessWidget {
           ]),
         ),
         const SizedBox(height: 16),
-        for (final n in _needs) _NeedDetailCard(need: n),
+        for (final n in needs) _NeedDetailCard(need: n),
         const SizedBox(height: AppSpacing.x3l),
       ])),
     ]);
@@ -459,18 +553,21 @@ class _NeedDetailCard extends StatelessWidget {
 
 // ── Skills Map ────────────────────────────────────────────────────────────────
 
-class _SkillsMap extends StatelessWidget {
+class _SkillsMap extends ConsumerWidget {
   const _SkillsMap({required this.onBack});
   final VoidCallback onBack;
 
   @override
-  Widget build(BuildContext context) {
-    final all = _skillGroups.expand((g) => g.skills).toList();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(playerSkillsProvider);
+    final isLive = async.asData?.value != null && async.asData!.value!.isNotEmpty;
+    final groups = _resolveSkillGroups(async.asData?.value);
+    final all = groups.expand((g) => g.skills).toList();
     final unlocked = all.where((s) => !s.locked).length;
-    final avg = all.where((s) => !s.locked).fold(0, (s, sk) => s + sk.level) ~/ unlocked;
+    final avg = unlocked == 0 ? 0 : all.where((s) => !s.locked).fold(0, (s, sk) => s + sk.level) ~/ unlocked;
 
     return Column(children: [
-      _SubHeader(title: 'Skills Map', onBack: onBack),
+      _SubHeader(title: 'Skills Map', onBack: onBack, trailing: _livePill(isLive)),
       Expanded(child: ListView(padding: const EdgeInsets.all(AppSpacing.screenH), children: [
         // Summary
         Row(children: [
@@ -479,7 +576,7 @@ class _SkillsMap extends StatelessWidget {
           Expanded(child: _SkillSummary(label: 'Avg. Level', value: '$avg', color: AppColors.sky)),
         ]),
         const SizedBox(height: AppSpacing.xl),
-        for (final group in _skillGroups) ...[
+        for (final group in groups) ...[
           Text(group.title.toUpperCase(), style: AppTypography.labelCaps.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 2),
           Text(group.subtitle, style: AppTypography.bodyS.copyWith(fontSize: 11)),

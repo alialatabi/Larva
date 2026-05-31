@@ -1,18 +1,22 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../shared/widgets/pressable.dart';
+import '../finance/wallet_providers.dart';
+import '../profile/profile_providers.dart';
+import 'dashboard_providers.dart';
 
 // ── Static mock data ──────────────────────────────────────────────────────────
 
 class _NeedData {
-  const _NeedData({required this.label, required this.val, required this.trend, required this.icon, required this.color});
-  final String label, trend, icon;
+  const _NeedData({required this.id, required this.label, required this.val, required this.trend, required this.icon, required this.color});
+  final String id, label, trend, icon;
   final int val;
   final Color color;
 }
@@ -30,15 +34,43 @@ class _EventData {
   final bool affectsMe;
 }
 
+// Presentation descriptors + fallback values; live values overlaid by id from
+// playerNeedsProvider.
 const _needs = [
-  _NeedData(label: 'Hunger',    val: 82, trend: 'stable', icon: '🍽',  color: AppColors.needHunger),
-  _NeedData(label: 'Energy',    val: 61, trend: 'down',   icon: '⚡',  color: AppColors.needEnergy),
-  _NeedData(label: 'Health',    val: 88, trend: 'stable', icon: '❤️', color: AppColors.needHealth),
-  _NeedData(label: 'Happiness', val: 71, trend: 'up',     icon: '😊',  color: AppColors.needHappiness),
-  _NeedData(label: 'Housing',   val: 90, trend: 'stable', icon: '🏠',  color: AppColors.needHousing),
-  _NeedData(label: 'Transport', val: 85, trend: 'stable', icon: '🚗',  color: AppColors.needTransport),
-  _NeedData(label: 'Ambition',  val: 65, trend: 'down',   icon: '🔥',  color: AppColors.needAmbition),
+  _NeedData(id: 'hunger',         label: 'Hunger',    val: 82, trend: 'stable', icon: '🍽',  color: AppColors.needHunger),
+  _NeedData(id: 'energy',         label: 'Energy',    val: 61, trend: 'down',   icon: '⚡',  color: AppColors.needEnergy),
+  _NeedData(id: 'health',         label: 'Health',    val: 88, trend: 'stable', icon: '❤️', color: AppColors.needHealth),
+  _NeedData(id: 'happiness',      label: 'Happiness', val: 71, trend: 'up',     icon: '😊',  color: AppColors.needHappiness),
+  _NeedData(id: 'housing',        label: 'Housing',   val: 90, trend: 'stable', icon: '🏠',  color: AppColors.needHousing),
+  _NeedData(id: 'transportation', label: 'Transport', val: 85, trend: 'stable', icon: '🚗',  color: AppColors.needTransport),
+  _NeedData(id: 'drive',          label: 'Ambition',  val: 65, trend: 'down',   icon: '🔥',  color: AppColors.needAmbition),
 ];
+
+List<_NeedData> _resolveDashNeeds(PlayerNeedsData? live) {
+  if (live == null) return _needs;
+  return [
+    for (final n in _needs)
+      _NeedData(id: n.id, label: n.label, val: live.values[n.id] ?? n.val, trend: n.trend, icon: n.icon, color: n.color),
+  ];
+}
+
+// Live (signed-in real data) vs Preview (debug/no session → mock fallback).
+Widget _livePill(bool live) {
+  final c = live ? AppColors.emerald : AppColors.amber;
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+    decoration: BoxDecoration(
+      color: c.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: c.withValues(alpha: 0.3)),
+    ),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Container(width: 5, height: 5, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
+      const SizedBox(width: 5),
+      Text(live ? 'Live' : 'Preview', style: AppTypography.label.copyWith(color: c, fontSize: 10, fontWeight: FontWeight.w600)),
+    ]),
+  );
+}
 
 const _companies = [
   _CompanyData(id: 1, name: 'Volta Café',      type: 'Café',        revenue: 4200,  employees: 3, status: 'good',    icon: '☕'),
@@ -118,20 +150,28 @@ class DashboardScreen extends StatelessWidget {
 
 // ── Header ────────────────────────────────────────────────────────────────────
 
-class _Header extends StatelessWidget {
+class _Header extends ConsumerWidget {
   const _Header();
 
+  String _greeting() {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'Good morning';
+    if (h < 18) return 'Good afternoon';
+    return 'Good evening';
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final name = ref.watch(playerProfileProvider).asData?.value?.displayName ?? 'Alex Rivera';
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.screenH, AppSpacing.md, AppSpacing.screenH, AppSpacing.sm),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Good morning', style: AppTypography.labelCaps),
+            Text(_greeting(), style: AppTypography.labelCaps),
             const SizedBox(height: 2),
-            Text('Alex Rivera', style: AppTypography.headingM),
+            Text(name, style: AppTypography.headingM),
           ]),
           // ui-ux-pro-max: Semantics label on icon-only button
           Semantics(
@@ -176,73 +216,53 @@ class _Header extends StatelessWidget {
 
 // ── Net Worth Hero ────────────────────────────────────────────────────────────
 
-class _NetWorthHero extends StatefulWidget {
+class _NetWorthHero extends ConsumerStatefulWidget {
   const _NetWorthHero();
 
   @override
-  State<_NetWorthHero> createState() => _NetWorthHeroState();
+  ConsumerState<_NetWorthHero> createState() => _NetWorthHeroState();
 }
 
-class _NetWorthHeroState extends State<_NetWorthHero> with SingleTickerProviderStateMixin {
-  static const int _target   = 847320;
-  static const int _startVal = _target - 12400;
-
-  late AnimationController _ctrl;
-  late Animation<double> _anim;
+class _NetWorthHeroState extends ConsumerState<_NetWorthHero> {
   bool _glow = false;
-  bool _showToast = false;
-  int _walletBalance = 84200;
-  int _delta = 12400;
-  Timer? _repeatTimer;
+  int _delta = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic);
-    Future.delayed(const Duration(milliseconds: 400), () {
-      if (mounted) _ctrl.forward();
+  void _flash(int delta) {
+    setState(() { _glow = true; _delta = delta; });
+    Future.delayed(const Duration(milliseconds: 1800), () {
+      if (mounted) setState(() => _glow = false);
     });
-    Future.delayed(const Duration(milliseconds: 3500), _fire);
-    _repeatTimer = Timer.periodic(const Duration(milliseconds: 12000), (_) => _fire());
-  }
-
-  void _fire() {
-    if (!mounted) return;
-    setState(() { _glow = true; _showToast = true; _walletBalance += 1200; _delta += 1200; });
-    Future.delayed(const Duration(milliseconds: 2200), () {
-      if (mounted) setState(() { _glow = false; _showToast = false; });
-    });
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    _repeatTimer?.cancel();
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Gold glow + delta whenever the live wallet increases (the "alive" mechanic).
+    ref.listen<AsyncValue<int?>>(walletBalanceProvider, (prev, next) {
+      final p = prev?.asData?.value;
+      final n = next.asData?.value;
+      if (p != null && n != null && n > p) _flash(n - p);
+    });
+
+    final wallet = ref.watch(walletBalanceProvider).asData?.value;
+    final portfolio = ref.watch(portfolioValueProvider).asData?.value ?? 0;
+    final isLive = wallet != null;
+    // Net worth = wallet + portfolio (+ company cash once company_accounts is wired).
+    final netWorth = (wallet ?? 84200) + portfolio;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.screenH, AppSpacing.sm, AppSpacing.screenH, AppSpacing.md),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 500),
         decoration: BoxDecoration(
           // frontend-design: gradient background for atmosphere + depth
-          gradient: LinearGradient(
+          gradient: const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              AppColors.bgElevated,
-              AppColors.bgSurface,
-            ],
+            colors: [AppColors.bgElevated, AppColors.bgSurface],
           ),
           borderRadius: BorderRadius.circular(AppRadius.hero),
           border: Border.all(
-            color: _glow
-                ? AppColors.gold.withValues(alpha: 0.35)
-                : AppColors.borderSubtle,
+            color: _glow ? AppColors.gold.withValues(alpha: 0.35) : AppColors.borderSubtle,
           ),
           // ui-ux-pro-max: gold ambient glow on balance increase
           boxShadow: _glow
@@ -254,28 +274,31 @@ class _NetWorthHeroState extends State<_NetWorthHero> with SingleTickerProviderS
                   BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 20, offset: const Offset(0, 4)),
                 ],
         ),
-        child: Stack(clipBehavior: Clip.none, children: [
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
               Text('Net Worth', style: AppTypography.labelCaps),
-              const SizedBox(height: AppSpacing.sm),
-              // RepaintBoundary isolates the animating number from the rest
-              RepaintBoundary(
-                child: AnimatedBuilder(
-                  animation: _anim,
-                  builder: (_, __) {
-                    final val = (_startVal + (_target - _startVal) * _anim.value).round();
-                    return RichText(
-                      text: TextSpan(children: [
-                        TextSpan(text: '\$ ', style: AppTypography.displayXL.copyWith(color: AppColors.gold)),
-                        TextSpan(text: NumberFormat.decimalPattern().format(val), style: AppTypography.displayXL),
-                      ]),
-                    );
-                  },
+              const SizedBox(width: 8),
+              _livePill(isLive),
+            ]),
+            const SizedBox(height: AppSpacing.sm),
+            // RepaintBoundary isolates the animating number from the rest
+            RepaintBoundary(
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: netWorth.toDouble()),
+                duration: const Duration(milliseconds: 600),
+                curve: Curves.easeOutCubic,
+                builder: (_, val, __) => RichText(
+                  text: TextSpan(children: [
+                    TextSpan(text: '\$ ', style: AppTypography.displayXL.copyWith(color: AppColors.gold)),
+                    TextSpan(text: NumberFormat.decimalPattern().format(val.round()), style: AppTypography.displayXL),
+                  ]),
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
+            ),
+            if (_glow) ...[
+              const SizedBox(height: AppSpacing.sm),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 3),
                 decoration: BoxDecoration(
@@ -287,44 +310,24 @@ class _NetWorthHeroState extends State<_NetWorthHero> with SingleTickerProviderS
                   const Icon(Icons.arrow_upward, color: AppColors.emerald, size: 10),
                   const SizedBox(width: 4),
                   Text(
-                    '+\$ ${NumberFormat.decimalPattern().format(_delta)} since last cycle',
+                    '+\$ ${NumberFormat.decimalPattern().format(_delta)}',
                     style: AppTypography.dataS.copyWith(color: AppColors.emerald, fontSize: 12),
                   ),
                 ]),
               ),
-              const SizedBox(height: AppSpacing.md),
-              const Divider(color: AppColors.borderSubtle, height: 1),
-              const SizedBox(height: AppSpacing.md),
-              Row(children: [
-                _SubStat(label: 'Wallet',     val: '\$ ${NumberFormat.decimalPattern().format(_walletBalance)}', highlight: true),
-                const _StatDivider(),
-                const _SubStat(label: 'Companies', val: '\$ 15,600'),
-                const _StatDivider(),
-                const _SubStat(label: 'Portfolio',  val: '\$ 120,400'),
-              ]),
+            ],
+            const SizedBox(height: AppSpacing.md),
+            const Divider(color: AppColors.borderSubtle, height: 1),
+            const SizedBox(height: AppSpacing.md),
+            Row(children: [
+              _SubStat(label: 'Wallet', val: '\$ ${NumberFormat.decimalPattern().format(wallet ?? 84200)}', highlight: true),
+              const _StatDivider(),
+              const _SubStat(label: 'Companies', val: '\$ 0'),
+              const _StatDivider(),
+              _SubStat(label: 'Portfolio', val: '\$ ${NumberFormat.decimalPattern().format(portfolio)}'),
             ]),
-          ),
-          // Income toast
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOutCubic,
-            top: _showToast ? 14 : 4,
-            right: 14,
-            child: AnimatedOpacity(
-              opacity: _showToast ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 200),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                decoration: BoxDecoration(
-                  color: AppColors.emerald.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.emerald.withValues(alpha: 0.3)),
-                ),
-                child: Text('+\$ 1,200', style: AppTypography.dataS.copyWith(color: AppColors.emerald)),
-              ),
-            ),
-          ),
-        ]),
+          ]),
+        ),
       ),
     );
   }
@@ -460,18 +463,20 @@ class _CycleStat extends StatelessWidget {
 
 // ── Needs Section ─────────────────────────────────────────────────────────────
 
-class _NeedsSection extends StatefulWidget {
+class _NeedsSection extends ConsumerStatefulWidget {
   const _NeedsSection();
   @override
-  State<_NeedsSection> createState() => _NeedsSectionState();
+  ConsumerState<_NeedsSection> createState() => _NeedsSectionState();
 }
 
-class _NeedsSectionState extends State<_NeedsSection> {
+class _NeedsSectionState extends ConsumerState<_NeedsSection> {
   bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
-    final visible = _expanded ? _needs : _needs.sublist(0, 4);
+    final async = ref.watch(playerNeedsProvider);
+    final needs = _resolveDashNeeds(async.asData?.value);
+    final visible = _expanded ? needs : needs.sublist(0, 4);
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.screenH, 0, AppSpacing.screenH, AppSpacing.md),
       child: Container(
@@ -484,7 +489,11 @@ class _NeedsSectionState extends State<_NeedsSection> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
             child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text('My Needs', style: AppTypography.labelCaps),
+              Row(children: [
+                Text('My Needs', style: AppTypography.labelCaps),
+                const SizedBox(width: 8),
+                _livePill(async.asData?.value != null),
+              ]),
               Pressable(
                 onTap: () => setState(() => _expanded = !_expanded),
                 child: Text(

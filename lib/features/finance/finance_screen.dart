@@ -5,6 +5,9 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import 'deposit_providers.dart';
+import 'loan_providers.dart';
+import 'transaction_providers.dart';
 import 'wallet_providers.dart';
 
 // ── Mock data ─────────────────────────────────────────────────────────────────
@@ -18,13 +21,15 @@ const _companyAccounts = [
   ('Caedoria Retail', 5800),
 ];
 
-const _loans = [
-  _LoanData(id: 'L-001', lender: 'Central Bank', original: 50000, remaining: 38000, rate: 12, payment: 1200, issued: 30, matures: 70, nextDue: '1h 42m'),
+// Placeholder loans/deposits shown in debug preview (no session) and as an
+// error fallback. Live data comes from loansProvider / depositsProvider.
+const _mockLoans = [
+  LoanData(ref: 'L-001', lender: 'Central Bank', original: 50000, remaining: 38000, rate: 12, payment: 1200, issued: 30, matures: 70, nextDue: '1h 42m', paymentsMade: 9, paymentsOnTime: 9),
 ];
 
-const _deposits = [
-  _DepositData(id: 'D-001', bank: 'Central Bank',    amount: 12000, rate: 8.4, cycles: 10, remaining: 6),
-  _DepositData(id: 'D-002', bank: 'Ventrex Savings', amount: 8000,  rate: 9.1, cycles: 20, remaining: 14),
+const _mockDeposits = [
+  DepositData(ref: 'D-001', bank: 'Central Bank',    amount: 12000, rate: 8.4, cycles: 10, remaining: 6),
+  DepositData(ref: 'D-002', bank: 'Ventrex Savings', amount: 8000,  rate: 9.1, cycles: 20, remaining: 14),
 ];
 
 const _lenders = [
@@ -33,28 +38,30 @@ const _lenders = [
   _LenderData(id: 'mfi', name: 'Morrath Finance', rate: 16.0, max: 200000, term: '10–80 cycles', minScore: 400, badge: 'private'),
 ];
 
-const _txCycles = [
-  _TxCycle(cycle: 47, net: 2400, rows: [
-    _TxRow(id: 1,  type: 'salary',   dir: 'in',  label: 'Salary received',            sub: 'Horizon Tech',               time: '09:14', amount: 8000),
-    _TxRow(id: 2,  type: 'loan',     dir: 'out', label: 'Loan payment — Central Bank', sub: 'Auto-deducted cycle settle',  time: '00:00', amount: 1200),
-    _TxRow(id: 3,  type: 'rent',     dir: 'out', label: 'Personal rent',               sub: 'Caedoria Apt. #14',           time: '00:00', amount: 3200),
-    _TxRow(id: 4,  type: 'purchase', dir: 'out', label: 'Food purchase',               sub: 'Volta Café',                  time: '11:32', amount: 400),
-    _TxRow(id: 5,  type: 'fee',      dir: 'out', label: 'Transaction fee',             sub: 'Applied on salary',           time: '09:14', amount: 200),
+// Placeholder history shown in debug preview (no session) and as an error
+// fallback. Live data comes from `transactionCyclesProvider`.
+const _mockTxCycles = [
+  TxCycle(cycle: 47, net: 2400, rows: [
+    TxRow(type: 'salary',   dir: 'in',  label: 'Salary received',            sub: 'Horizon Tech',               time: '09:14', amount: 8000),
+    TxRow(type: 'loan',     dir: 'out', label: 'Loan payment — Central Bank', sub: 'Auto-deducted cycle settle',  time: '00:00', amount: 1200),
+    TxRow(type: 'rent',     dir: 'out', label: 'Personal rent',               sub: 'Caedoria Apt. #14',           time: '00:00', amount: 3200),
+    TxRow(type: 'purchase', dir: 'out', label: 'Food purchase',               sub: 'Volta Café',                  time: '11:32', amount: 400),
+    TxRow(type: 'fee',      dir: 'out', label: 'Transaction fee',             sub: 'Applied on salary',           time: '09:14', amount: 200),
   ]),
-  _TxCycle(cycle: 46, net: -800, rows: [
-    _TxRow(id: 6,  type: 'salary',   dir: 'in',  label: 'Salary received',            sub: 'Horizon Tech',               time: '09:02', amount: 8000),
-    _TxRow(id: 7,  type: 'loan',     dir: 'out', label: 'Loan payment — Central Bank', sub: 'Auto-deducted cycle settle',  time: '00:00', amount: 1200),
-    _TxRow(id: 8,  type: 'rent',     dir: 'out', label: 'Personal rent',               sub: 'Caedoria Apt. #14',           time: '00:00', amount: 3200),
-    _TxRow(id: 9,  type: 'purchase', dir: 'out', label: 'Clothing purchase',           sub: 'Caedoria Retail',             time: '14:55', amount: 2800),
-    _TxRow(id: 10, type: 'fee',      dir: 'out', label: 'Transaction fee',             sub: 'Applied on salary',           time: '09:02', amount: 200),
-    _TxRow(id: 12, type: 'salary',   dir: 'in',  label: 'Dividend — VLTF',            sub: 'Stock market',                time: '00:00', amount: 1000),
+  TxCycle(cycle: 46, net: -800, rows: [
+    TxRow(type: 'salary',   dir: 'in',  label: 'Salary received',            sub: 'Horizon Tech',               time: '09:02', amount: 8000),
+    TxRow(type: 'loan',     dir: 'out', label: 'Loan payment — Central Bank', sub: 'Auto-deducted cycle settle',  time: '00:00', amount: 1200),
+    TxRow(type: 'rent',     dir: 'out', label: 'Personal rent',               sub: 'Caedoria Apt. #14',           time: '00:00', amount: 3200),
+    TxRow(type: 'purchase', dir: 'out', label: 'Clothing purchase',           sub: 'Caedoria Retail',             time: '14:55', amount: 2800),
+    TxRow(type: 'fee',      dir: 'out', label: 'Transaction fee',             sub: 'Applied on salary',           time: '09:02', amount: 200),
+    TxRow(type: 'transfer', dir: 'in',  label: 'Dividend — VLTF',            sub: 'Stock market',                time: '00:00', amount: 1000),
   ]),
-  _TxCycle(cycle: 45, net: 5200, rows: [
-    _TxRow(id: 13, type: 'salary',   dir: 'in',  label: 'Salary received',            sub: 'Horizon Tech',               time: '09:10', amount: 8000),
-    _TxRow(id: 14, type: 'loan',     dir: 'out', label: 'Loan payment — Central Bank', sub: 'Auto-deducted cycle settle',  time: '00:00', amount: 1200),
-    _TxRow(id: 15, type: 'rent',     dir: 'out', label: 'Personal rent',               sub: 'Caedoria Apt. #14',           time: '00:00', amount: 3200),
-    _TxRow(id: 16, type: 'fee',      dir: 'out', label: 'Transaction fee',             sub: 'Applied on salary',           time: '09:10', amount: 200),
-    _TxRow(id: 17, type: 'transfer', dir: 'in',  label: 'Contract payment received',  sub: 'Meridian Corp',               time: '12:30', amount: 1800),
+  TxCycle(cycle: 45, net: 5200, rows: [
+    TxRow(type: 'salary',   dir: 'in',  label: 'Salary received',            sub: 'Horizon Tech',               time: '09:10', amount: 8000),
+    TxRow(type: 'loan',     dir: 'out', label: 'Loan payment — Central Bank', sub: 'Auto-deducted cycle settle',  time: '00:00', amount: 1200),
+    TxRow(type: 'rent',     dir: 'out', label: 'Personal rent',               sub: 'Caedoria Apt. #14',           time: '00:00', amount: 3200),
+    TxRow(type: 'fee',      dir: 'out', label: 'Transaction fee',             sub: 'Applied on salary',           time: '09:10', amount: 200),
+    TxRow(type: 'transfer', dir: 'in',  label: 'Contract payment received',  sub: 'Meridian Corp',               time: '12:30', amount: 1800),
   ]),
 ];
 
@@ -63,36 +70,11 @@ const _txDirFilters  = ['All', 'In', 'Out'];
 
 // ── Data classes ──────────────────────────────────────────────────────────────
 
-class _LoanData {
-  const _LoanData({required this.id, required this.lender, required this.original, required this.remaining, required this.rate, required this.payment, required this.issued, required this.matures, required this.nextDue});
-  final String id, lender, nextDue;
-  final int original, remaining, rate, payment, issued, matures;
-}
-
-class _DepositData {
-  const _DepositData({required this.id, required this.bank, required this.amount, required this.rate, required this.cycles, required this.remaining});
-  final String id, bank;
-  final int amount, cycles, remaining;
-  final double rate;
-}
-
 class _LenderData {
   const _LenderData({required this.id, required this.name, required this.rate, required this.max, required this.term, required this.minScore, required this.badge});
   final String id, name, term, badge;
   final double rate;
   final int max, minScore;
-}
-
-class _TxRow {
-  const _TxRow({required this.id, required this.type, required this.dir, required this.label, required this.sub, required this.time, required this.amount});
-  final int id, amount;
-  final String type, dir, label, sub, time;
-}
-
-class _TxCycle {
-  const _TxCycle({required this.cycle, required this.net, required this.rows});
-  final int cycle, net;
-  final List<_TxRow> rows;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -103,6 +85,43 @@ class _TxCycle {
   if (score >= 600) return (label: 'Good',      color: AppColors.emerald);
   if (score >= 400) return (label: 'Fair',       color: AppColors.amber);
   return                     (label: 'Poor',      color: AppColors.crimson);
+}
+
+// Drops a trailing ".0" so 12.0 → "12" but 8.4 stays "8.4".
+String _rateStr(double r) => r == r.roundToDouble() ? r.toInt().toString() : r.toString();
+
+// Live (signed-in, real data) vs Preview (debug/no session, mock fallback).
+Widget _livePill(bool live) {
+  final c = live ? AppColors.emerald : AppColors.amber;
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+    decoration: BoxDecoration(
+      color: c.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: c.withValues(alpha: 0.3)),
+    ),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Container(width: 5, height: 5, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
+      const SizedBox(width: 5),
+      Text(live ? 'Live' : 'Preview', style: AppTypography.label.copyWith(color: c, fontSize: 10, fontWeight: FontWeight.w600)),
+    ]),
+  );
+}
+
+// Centered empty / error message for the Finance detail lists.
+Widget _financeEmpty(IconData icon, String title, String body) {
+  return Center(
+    child: Padding(
+      padding: const EdgeInsets.all(AppSpacing.x2l),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, color: AppColors.textTertiary, size: 40),
+        const SizedBox(height: 14),
+        Text(title, style: AppTypography.headingL.copyWith(fontSize: 16), textAlign: TextAlign.center),
+        const SizedBox(height: 6),
+        Text(body, style: AppTypography.bodyS.copyWith(fontSize: 12), textAlign: TextAlign.center),
+      ]),
+    ),
+  );
 }
 
 String _txIcon(String type, String dir) {
@@ -199,6 +218,8 @@ class _LiveBalanceState extends ConsumerState<_LiveBalance> {
 
     final async = ref.watch(walletBalanceProvider);
     final band = _creditBand(_creditScore);
+    final loans = ref.watch(loansProvider).asData?.value ?? _mockLoans;
+    final loansDue = loans.fold<int>(0, (s, l) => s + l.payment);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 500),
@@ -237,7 +258,7 @@ class _LiveBalanceState extends ConsumerState<_LiveBalance> {
         Row(children: [
           _SubStat2(label: 'Companies', val: '\$ ${NumberFormat.decimalPattern().format(_companyAccounts.fold(0, (s, c) => s + c.$2))}'),
           _StatDivider2(),
-          const _SubStat2(label: 'Loans due', val: '\$ 1,200', color: AppColors.crimson),
+          _SubStat2(label: 'Loans due', val: '\$ ${NumberFormat.decimalPattern().format(loansDue)}', color: AppColors.crimson),
           _StatDivider2(),
           _SubStat2(label: 'Credit', val: '$_creditScore ${band.label}', color: band.color),
         ]),
@@ -300,16 +321,24 @@ class _StatDivider2 extends StatelessWidget {
 
 // ── Wallet Overview ───────────────────────────────────────────────────────────
 
-class _WalletOverview extends StatelessWidget {
+class _WalletOverview extends ConsumerWidget {
   const _WalletOverview({required this.onTxHistory, required this.onLoans, required this.onDeposits, required this.onLoanApp});
   final VoidCallback onTxHistory, onLoans, onDeposits, onLoanApp;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final band = _creditBand(_creditScore);
     final totalCompany = _companyAccounts.fold(0, (s, c) => s + c.$2);
-    final totalDeposit = _deposits.fold(0, (s, d) => s + d.amount);
-    final avgDepRate = (_deposits.fold(0.0, (s, d) => s + d.rate) / _deposits.length).toStringAsFixed(1);
+    // Live loans/deposits; fall back to placeholders in preview/loading/error.
+    final loans = ref.watch(loansProvider).asData?.value ?? _mockLoans;
+    final deposits = ref.watch(depositsProvider).asData?.value ?? _mockDeposits;
+    final totalDeposit = deposits.fold<int>(0, (s, d) => s + d.amount);
+    final avgDepRate = deposits.isEmpty
+        ? '0.0'
+        : (deposits.fold<double>(0.0, (s, d) => s + d.rate) / deposits.length).toStringAsFixed(1);
+    final totalLoanRemaining = loans.fold<int>(0, (s, l) => s + l.remaining);
+    final nextLoanPayment = loans.isEmpty ? 0 : loans.first.payment;
+    final nextLoanDue = loans.isEmpty ? '—' : loans.first.nextDue;
 
     return ListView(padding: const EdgeInsets.all(AppSpacing.screenH), children: [
       const _LiveBalance(),
@@ -454,23 +483,25 @@ class _WalletOverview extends StatelessWidget {
             const SizedBox(height: 10),
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               Text('Active loans', style: AppTypography.bodyS.copyWith(fontSize: 12)),
-              Text('1 · \$ 38,000 remaining', style: AppTypography.dataS.copyWith(fontSize: 13)),
+              Text('${loans.length} · \$ ${NumberFormat.decimalPattern().format(totalLoanRemaining)} remaining', style: AppTypography.dataS.copyWith(fontSize: 13)),
             ]),
             const SizedBox(height: 6),
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               Text('Next payment', style: AppTypography.bodyS.copyWith(fontSize: 12)),
               Row(children: [
-                Text('\$ 1,200', style: AppTypography.dataS.copyWith(fontSize: 13, color: AppColors.crimson)),
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.amber.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(5),
-                    border: Border.all(color: AppColors.amber.withOpacity(0.25)),
+                Text('\$ ${NumberFormat.decimalPattern().format(nextLoanPayment)}', style: AppTypography.dataS.copyWith(fontSize: 13, color: AppColors.crimson)),
+                if (loans.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.amber.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: AppColors.amber.withOpacity(0.25)),
+                    ),
+                    child: Text('in $nextLoanDue', style: AppTypography.label.copyWith(color: AppColors.amber, fontWeight: FontWeight.w600, fontSize: 10)),
                   ),
-                  child: Text('in 1h 42m', style: AppTypography.label.copyWith(color: AppColors.amber, fontWeight: FontWeight.w600, fontSize: 10)),
-                ),
+                ],
               ]),
             ]),
           ]),
@@ -495,7 +526,7 @@ class _WalletOverview extends StatelessWidget {
             ]),
             const SizedBox(height: 10),
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text('${_deposits.length} deposits', style: AppTypography.bodyS.copyWith(fontSize: 12)),
+              Text('${deposits.length} deposits', style: AppTypography.bodyS.copyWith(fontSize: 12)),
               Text('\$ ${NumberFormat.decimalPattern().format(totalDeposit)}', style: AppTypography.dataS.copyWith(fontSize: 13)),
             ]),
             const SizedBox(height: 6),
@@ -543,19 +574,20 @@ class _QuickAction extends StatelessWidget {
 
 // ── Transaction History ───────────────────────────────────────────────────────
 
-class _TxHistoryScreen extends StatefulWidget {
+class _TxHistoryScreen extends ConsumerStatefulWidget {
   const _TxHistoryScreen({required this.onBack});
   final VoidCallback onBack;
   @override
-  State<_TxHistoryScreen> createState() => _TxHistoryScreenState();
+  ConsumerState<_TxHistoryScreen> createState() => _TxHistoryScreenState();
 }
 
-class _TxHistoryScreenState extends State<_TxHistoryScreen> {
+class _TxHistoryScreenState extends ConsumerState<_TxHistoryScreen> {
   String _typeF = 'All';
   String _dirF  = 'All';
 
-  List<_TxCycle> get _filtered {
-    return _txCycles.map((cyc) => _TxCycle(
+  // Apply the active type/direction chips to any cycle source (live or mock).
+  List<TxCycle> _applyFilters(List<TxCycle> source) {
+    return source.map((cyc) => TxCycle(
       cycle: cyc.cycle,
       net: cyc.net,
       rows: cyc.rows.where((r) {
@@ -568,6 +600,10 @@ class _TxHistoryScreenState extends State<_TxHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final async = ref.watch(transactionCyclesProvider);
+    // data == null → debug preview / signed out; show mock with a "Preview" pill.
+    final isLive = async.asData?.value != null;
+
     return Column(children: [
       // Header
       Container(
@@ -585,6 +621,8 @@ class _TxHistoryScreenState extends State<_TxHistoryScreen> {
             ),
             const SizedBox(width: 12),
             Text('Transactions', style: AppTypography.headingL.copyWith(fontSize: 18)),
+            const SizedBox(width: 8),
+            _txStatusPill(live: isLive),
           ]),
           const SizedBox(height: 12),
           // Type filter chips
@@ -625,61 +663,144 @@ class _TxHistoryScreenState extends State<_TxHistoryScreen> {
           const SizedBox(height: 12),
         ]),
       ),
-      // Transaction list
-      Expanded(child: ListView.builder(
-        itemCount: _filtered.length,
-        itemBuilder: (_, i) {
-          final cyc = _filtered[i];
-          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
-              child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Text('Cycle ${cyc.cycle}', style: AppTypography.labelCaps.copyWith(fontWeight: FontWeight.w600)),
-                Row(children: [
-                  Icon(cyc.net >= 0 ? Icons.arrow_upward : Icons.arrow_downward, size: 9, color: cyc.net >= 0 ? AppColors.emerald : AppColors.crimson),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${cyc.net >= 0 ? '+' : '-'}\$ ${NumberFormat.decimalPattern().format(cyc.net.abs())} net',
-                    style: AppTypography.dataS.copyWith(fontSize: 11, color: cyc.net >= 0 ? AppColors.emerald : AppColors.crimson),
-                  ),
-                ]),
-              ]),
-            ),
-            ...cyc.rows.map((row) => Container(
-              decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.borderSubtle))),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              child: Row(children: [
-                Container(
-                  width: 36, height: 36,
-                  decoration: BoxDecoration(color: AppColors.bgSurface, borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.borderSubtle)),
-                  child: Center(child: Text(_txIcon(row.type, row.dir), style: const TextStyle(fontSize: 14))),
-                ),
-                const SizedBox(width: 12),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(row.label, style: AppTypography.bodyS.copyWith(fontWeight: FontWeight.w500, color: AppColors.textPrimary, fontSize: 13), overflow: TextOverflow.ellipsis),
-                  Text('${row.sub} · ${row.time}', style: AppTypography.labelCaps.copyWith(fontSize: 11)),
-                ])),
-                Text(
-                  '${row.dir == 'in' ? '+' : '-'}\$ ${NumberFormat.decimalPattern().format(row.amount)}',
-                  style: AppTypography.dataS.copyWith(fontSize: 14, color: row.dir == 'in' ? AppColors.emerald : AppColors.crimson),
-                ),
-              ]),
-            )),
-          ]);
+      // Transaction list — live, with preview/loading/empty/error fallbacks.
+      Expanded(child: async.when(
+        loading: () => _skeletonList(),
+        error: (_, __) => _txList(_applyFilters(_mockTxCycles)),
+        data: (live) {
+          if (live == null) return _txList(_applyFilters(_mockTxCycles)); // preview
+          if (live.isEmpty) return _emptyState();
+          return _txList(_applyFilters(live));
         },
       )),
+    ]);
+  }
+
+  Widget _txStatusPill({required bool live}) {
+    final c = live ? AppColors.emerald : AppColors.amber;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: c.withValues(alpha: 0.3)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(width: 5, height: 5, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
+        const SizedBox(width: 5),
+        Text(live ? 'Live' : 'Preview', style: AppTypography.label.copyWith(color: c, fontSize: 10, fontWeight: FontWeight.w600)),
+      ]),
+    );
+  }
+
+  Widget _txList(List<TxCycle> cycles) {
+    if (cycles.isEmpty) return _emptyState(filtered: true);
+    return ListView.builder(
+      itemCount: cycles.length,
+      itemBuilder: (_, i) {
+        final cyc = cycles[i];
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
+            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text('Cycle ${cyc.cycle}', style: AppTypography.labelCaps.copyWith(fontWeight: FontWeight.w600)),
+              Row(children: [
+                Icon(cyc.net >= 0 ? Icons.arrow_upward : Icons.arrow_downward, size: 9, color: cyc.net >= 0 ? AppColors.emerald : AppColors.crimson),
+                const SizedBox(width: 4),
+                Text(
+                  '${cyc.net >= 0 ? '+' : '-'}\$ ${NumberFormat.decimalPattern().format(cyc.net.abs())} net',
+                  style: AppTypography.dataS.copyWith(fontSize: 11, color: cyc.net >= 0 ? AppColors.emerald : AppColors.crimson),
+                ),
+              ]),
+            ]),
+          ),
+          ...cyc.rows.map((row) => Container(
+            decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.borderSubtle))),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            child: Row(children: [
+              Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(color: AppColors.bgSurface, borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.borderSubtle)),
+                child: Center(child: Text(_txIcon(row.type, row.dir), style: const TextStyle(fontSize: 14))),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(row.label, style: AppTypography.bodyS.copyWith(fontWeight: FontWeight.w500, color: AppColors.textPrimary, fontSize: 13), overflow: TextOverflow.ellipsis),
+                Text('${row.sub} · ${row.time}', style: AppTypography.labelCaps.copyWith(fontSize: 11)),
+              ])),
+              Text(
+                '${row.dir == 'in' ? '+' : '-'}\$ ${NumberFormat.decimalPattern().format(row.amount)}',
+                style: AppTypography.dataS.copyWith(fontSize: 14, color: row.dir == 'in' ? AppColors.emerald : AppColors.crimson),
+              ),
+            ]),
+          )),
+        ]);
+      },
+    );
+  }
+
+  Widget _emptyState({bool filtered = false}) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.x2l),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(filtered ? Icons.filter_alt_off_outlined : Icons.receipt_long_outlined, color: AppColors.textTertiary, size: 40),
+          const SizedBox(height: 14),
+          Text(
+            filtered ? 'No matching transactions' : 'No transactions yet',
+            style: AppTypography.headingL.copyWith(fontSize: 16),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            filtered
+                ? 'Try a different filter to see more of your history.'
+                : 'Your ledger fills as the economy settles each cycle — salaries, rent, loans and trades land here.',
+            style: AppTypography.bodyS.copyWith(fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _skeletonList() {
+    return ListView(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10), children: [
+      for (var c = 0; c < 2; c++) ...[
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Container(width: 120, height: 12, decoration: BoxDecoration(color: AppColors.bgInput, borderRadius: BorderRadius.circular(4))),
+        ),
+        for (var r = 0; r < 4; r++) Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Row(children: [
+            Container(width: 36, height: 36, decoration: BoxDecoration(color: AppColors.bgInput, borderRadius: BorderRadius.circular(10))),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Container(width: double.infinity, height: 12, decoration: BoxDecoration(color: AppColors.bgInput, borderRadius: BorderRadius.circular(4))),
+              const SizedBox(height: 6),
+              Container(width: 100, height: 10, decoration: BoxDecoration(color: AppColors.bgInput, borderRadius: BorderRadius.circular(4))),
+            ])),
+            const SizedBox(width: 12),
+            Container(width: 56, height: 12, decoration: BoxDecoration(color: AppColors.bgInput, borderRadius: BorderRadius.circular(4))),
+          ]),
+        ),
+      ],
     ]);
   }
 }
 
 // ── Loans Screen ──────────────────────────────────────────────────────────────
 
-class _LoansScreen extends StatelessWidget {
+class _LoansScreen extends ConsumerWidget {
   const _LoansScreen({required this.onBack, required this.onApply});
   final VoidCallback onBack, onApply;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(loansProvider);
+    final isLive = async.asData?.value != null;
+
     return Column(children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
@@ -690,6 +811,8 @@ class _LoansScreen extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Text('My Loans', style: AppTypography.headingL.copyWith(fontSize: 18)),
+          const SizedBox(width: 8),
+          _livePill(isLive),
           const Spacer(),
           GestureDetector(
             onTap: onApply,
@@ -701,58 +824,79 @@ class _LoansScreen extends StatelessWidget {
           ),
         ]),
       ),
-      Expanded(child: ListView(padding: const EdgeInsets.all(AppSpacing.screenH), children: [
-        ..._loans.map((loan) {
-          final progress = 1 - (loan.remaining / loan.original);
-          return Container(
-            margin: const EdgeInsets.only(bottom: 14),
-            decoration: BoxDecoration(
-              color: AppColors.bgSurface,
-              borderRadius: BorderRadius.circular(AppRadius.card),
-              border: Border.all(color: AppColors.borderSubtle),
-            ),
-            padding: const EdgeInsets.all(16),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(loan.lender, style: AppTypography.headingS),
-                  Text('${loan.id} · ${loan.rate}% per cycle', style: AppTypography.labelCaps.copyWith(fontSize: 11)),
-                ]),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(color: AppColors.amber.withOpacity(0.1), borderRadius: BorderRadius.circular(6), border: Border.all(color: AppColors.amber.withOpacity(0.3))),
-                  child: Text('Due ${loan.nextDue}', style: AppTypography.label.copyWith(color: AppColors.amber, fontWeight: FontWeight.w600, fontSize: 10)),
-                ),
+      Expanded(child: async.when(
+        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.gold)),
+        error: (_, __) => _loansList(_mockLoans),
+        data: (live) {
+          if (live == null) return _loansList(_mockLoans); // preview
+          if (live.isEmpty) {
+            return _financeEmpty(Icons.account_balance_outlined, 'No active loans',
+                'When you take a loan it shows here with its repayment schedule and on-time history.');
+          }
+          return _loansList(live);
+        },
+      )),
+    ]);
+  }
+
+  Widget _loansList(List<LoanData> loans) {
+    return ListView(padding: const EdgeInsets.all(AppSpacing.screenH), children: [
+      ...loans.map((loan) {
+        final progress = loan.original == 0 ? 0.0 : 1 - (loan.remaining / loan.original);
+        return Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          decoration: BoxDecoration(
+            color: AppColors.bgSurface,
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(color: AppColors.borderSubtle),
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(loan.lender, style: AppTypography.headingS),
+                Text('${loan.ref} · ${_rateStr(loan.rate)}% per cycle', style: AppTypography.labelCaps.copyWith(fontSize: 11)),
               ]),
-              const SizedBox(height: 14),
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Remaining', style: AppTypography.labelCaps.copyWith(fontSize: 10)),
-                  Text('\$ ${NumberFormat.decimalPattern().format(loan.remaining)}', style: AppTypography.dataM.copyWith(fontSize: 20, color: AppColors.crimson)),
-                ]),
-                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Text('Payment', style: AppTypography.labelCaps.copyWith(fontSize: 10)),
-                  Text('\$ ${NumberFormat.decimalPattern().format(loan.payment)}/cycle', style: AppTypography.dataS.copyWith(color: AppColors.amber)),
-                ]),
-              ]),
-              const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(2),
-                child: SizedBox(height: 4, child: LinearProgressIndicator(
-                  value: progress,
-                  backgroundColor: AppColors.bgInput,
-                  valueColor: const AlwaysStoppedAnimation(AppColors.emerald),
-                )),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: AppColors.amber.withOpacity(0.1), borderRadius: BorderRadius.circular(6), border: Border.all(color: AppColors.amber.withOpacity(0.3))),
+                child: Text('Due ${loan.nextDue}', style: AppTypography.label.copyWith(color: AppColors.amber, fontWeight: FontWeight.w600, fontSize: 10)),
               ),
-              const SizedBox(height: 6),
-              Text('Cycle ${loan.issued} → ${loan.matures} · ${loan.matures - loan.issued} cycles total', style: AppTypography.labelCaps.copyWith(fontSize: 10)),
-              const SizedBox(height: 14),
-              // Payment history dots
-              _HeartbeatDots(history: List.generate(9, (_) => 1), total: 40),
             ]),
-          );
-        }),
-      ])),
+            const SizedBox(height: 14),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Remaining', style: AppTypography.labelCaps.copyWith(fontSize: 10)),
+                Text('\$ ${NumberFormat.decimalPattern().format(loan.remaining)}', style: AppTypography.dataM.copyWith(fontSize: 20, color: AppColors.crimson)),
+              ]),
+              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Text('Payment', style: AppTypography.labelCaps.copyWith(fontSize: 10)),
+                Text('\$ ${NumberFormat.decimalPattern().format(loan.payment)}/cycle', style: AppTypography.dataS.copyWith(color: AppColors.amber)),
+              ]),
+            ]),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: SizedBox(height: 4, child: LinearProgressIndicator(
+                value: progress,
+                backgroundColor: AppColors.bgInput,
+                valueColor: const AlwaysStoppedAnimation(AppColors.emerald),
+              )),
+            ),
+            const SizedBox(height: 6),
+            Text('Cycle ${loan.issued} → ${loan.matures} · ${loan.matures - loan.issued} cycles total', style: AppTypography.labelCaps.copyWith(fontSize: 10)),
+            const SizedBox(height: 14),
+            // Payment history dots: on-time (green), missed (red), upcoming (grey).
+            _HeartbeatDots(
+              history: [
+                ...List.generate(loan.paymentsOnTime, (_) => 1),
+                ...List.generate((loan.paymentsMade - loan.paymentsOnTime).clamp(0, loan.paymentsMade), (_) => 0),
+              ],
+              total: (loan.matures - loan.issued).clamp(0, 1000),
+            ),
+          ]),
+        );
+      }),
     ]);
   }
 }
@@ -793,12 +937,15 @@ class _HeartbeatDots extends StatelessWidget {
 
 // ── Deposits Screen ───────────────────────────────────────────────────────────
 
-class _DepositsScreen extends StatelessWidget {
+class _DepositsScreen extends ConsumerWidget {
   const _DepositsScreen({required this.onBack});
   final VoidCallback onBack;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(depositsProvider);
+    final isLive = async.asData?.value != null;
+
     return Column(children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
@@ -809,6 +956,8 @@ class _DepositsScreen extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Text('My Deposits', style: AppTypography.headingL.copyWith(fontSize: 18)),
+          const SizedBox(width: 8),
+          _livePill(isLive),
           const Spacer(),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
@@ -817,56 +966,71 @@ class _DepositsScreen extends StatelessWidget {
           ),
         ]),
       ),
-      Expanded(child: ListView(padding: const EdgeInsets.all(AppSpacing.screenH), children: [
-        ..._deposits.map((dep) {
-          final progress = 1 - (dep.remaining / dep.cycles);
-          final earned = (dep.amount * dep.rate / 100 * (dep.cycles - dep.remaining)).round();
-          return Container(
-            margin: const EdgeInsets.only(bottom: 14),
-            decoration: BoxDecoration(
-              color: AppColors.bgSurface,
-              borderRadius: BorderRadius.circular(AppRadius.card),
-              border: Border.all(color: AppColors.borderSubtle),
-            ),
-            padding: const EdgeInsets.all(16),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(dep.bank, style: AppTypography.headingS),
-                  Text('${dep.id} · ${dep.cycles} cycles total', style: AppTypography.labelCaps.copyWith(fontSize: 11)),
-                ]),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(color: AppColors.emerald.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-                  child: Text('${dep.rate}%/cycle', style: AppTypography.dataS.copyWith(color: AppColors.emerald, fontSize: 11)),
-                ),
+      Expanded(child: async.when(
+        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.gold)),
+        error: (_, __) => _depositsList(_mockDeposits),
+        data: (live) {
+          if (live == null) return _depositsList(_mockDeposits); // preview
+          if (live.isEmpty) {
+            return _financeEmpty(Icons.savings_outlined, 'No deposits yet',
+                'Open a term deposit to earn interest each cycle — it will appear here with its accrual progress.');
+          }
+          return _depositsList(live);
+        },
+      )),
+    ]);
+  }
+
+  Widget _depositsList(List<DepositData> deposits) {
+    return ListView(padding: const EdgeInsets.all(AppSpacing.screenH), children: [
+      ...deposits.map((dep) {
+        final progress = dep.cycles == 0 ? 0.0 : 1 - (dep.remaining / dep.cycles);
+        final earned = (dep.amount * dep.rate / 100 * (dep.cycles - dep.remaining)).round();
+        return Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          decoration: BoxDecoration(
+            color: AppColors.bgSurface,
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(color: AppColors.borderSubtle),
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(dep.bank, style: AppTypography.headingS),
+                Text('${dep.ref} · ${dep.cycles} cycles total', style: AppTypography.labelCaps.copyWith(fontSize: 11)),
               ]),
-              const SizedBox(height: 14),
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Principal', style: AppTypography.labelCaps.copyWith(fontSize: 10)),
-                  Text('\$ ${NumberFormat.decimalPattern().format(dep.amount)}', style: AppTypography.dataM.copyWith(fontSize: 20, color: AppColors.gold)),
-                ]),
-                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Text('Earned so far', style: AppTypography.labelCaps.copyWith(fontSize: 10)),
-                  Text('\$ ${NumberFormat.decimalPattern().format(earned)}', style: AppTypography.dataS.copyWith(color: AppColors.emerald)),
-                ]),
-              ]),
-              const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(2),
-                child: SizedBox(height: 4, child: LinearProgressIndicator(
-                  value: progress,
-                  backgroundColor: AppColors.bgInput,
-                  valueColor: const AlwaysStoppedAnimation(AppColors.emerald),
-                )),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: AppColors.emerald.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+                child: Text('${_rateStr(dep.rate)}%/cycle', style: AppTypography.dataS.copyWith(color: AppColors.emerald, fontSize: 11)),
               ),
-              const SizedBox(height: 6),
-              Text('${dep.remaining} cycles remaining', style: AppTypography.labelCaps.copyWith(fontSize: 10)),
             ]),
-          );
-        }),
-      ])),
+            const SizedBox(height: 14),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Principal', style: AppTypography.labelCaps.copyWith(fontSize: 10)),
+                Text('\$ ${NumberFormat.decimalPattern().format(dep.amount)}', style: AppTypography.dataM.copyWith(fontSize: 20, color: AppColors.gold)),
+              ]),
+              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Text('Earned so far', style: AppTypography.labelCaps.copyWith(fontSize: 10)),
+                Text('\$ ${NumberFormat.decimalPattern().format(earned)}', style: AppTypography.dataS.copyWith(color: AppColors.emerald)),
+              ]),
+            ]),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: SizedBox(height: 4, child: LinearProgressIndicator(
+                value: progress,
+                backgroundColor: AppColors.bgInput,
+                valueColor: const AlwaysStoppedAnimation(AppColors.emerald),
+              )),
+            ),
+            const SizedBox(height: 6),
+            Text('${dep.remaining} cycles remaining', style: AppTypography.labelCaps.copyWith(fontSize: 10)),
+          ]),
+        );
+      }),
     ]);
   }
 }
