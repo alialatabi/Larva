@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
+import 'wallet_providers.dart';
 
 // ── Mock data ─────────────────────────────────────────────────────────────────
 
@@ -169,61 +171,65 @@ class _FinanceScreenState extends State<FinanceScreen> {
 
 // ── Live Balance Hero ─────────────────────────────────────────────────────────
 
-class _LiveBalance extends StatefulWidget {
+class _LiveBalance extends ConsumerStatefulWidget {
   const _LiveBalance();
   @override
-  State<_LiveBalance> createState() => _LiveBalanceState();
+  ConsumerState<_LiveBalance> createState() => _LiveBalanceState();
 }
 
-class _LiveBalanceState extends State<_LiveBalance> {
-  int _val = _walletBalance;
+class _LiveBalanceState extends ConsumerState<_LiveBalance> {
   bool _glowing = false;
-  Timer? _repeatTimer;
+  int _delta = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    Future.delayed(const Duration(milliseconds: 2800), _fire);
-    _repeatTimer = Timer.periodic(const Duration(milliseconds: 11000), (_) => _fire());
-  }
-
-  void _fire() {
-    if (!mounted) return;
-    final delta = 800 + (DateTime.now().millisecondsSinceEpoch % 1600);
-    setState(() { _val += delta.toInt(); _glowing = true; });
-    Future.delayed(const Duration(milliseconds: 700), () {
+  void _flashGlow(int delta) {
+    setState(() { _glowing = true; _delta = delta; });
+    Future.delayed(const Duration(milliseconds: 1800), () {
       if (mounted) setState(() => _glowing = false);
     });
   }
 
   @override
-  void dispose() { _repeatTimer?.cancel(); super.dispose(); }
-
-  @override
   Widget build(BuildContext context) {
+    // Gold glow + delta whenever the live balance increases (the "alive" mechanic).
+    ref.listen<AsyncValue<int?>>(walletBalanceProvider, (prev, next) {
+      final p = prev?.asData?.value;
+      final n = next.asData?.value;
+      if (p != null && n != null && n > p) _flashGlow(n - p);
+    });
+
+    final async = ref.watch(walletBalanceProvider);
     final band = _creditBand(_creditScore);
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 500),
       decoration: BoxDecoration(
         color: AppColors.bgSurface,
         borderRadius: BorderRadius.circular(AppRadius.hero),
-        border: Border.all(color: AppColors.borderSubtle),
+        border: Border.all(color: _glowing ? AppColors.gold.withValues(alpha: 0.35) : AppColors.borderSubtle),
         boxShadow: _glowing ? [
-          BoxShadow(color: AppColors.gold.withOpacity(0.18), blurRadius: 50),
-          BoxShadow(color: AppColors.gold.withOpacity(0.07), blurRadius: 100),
+          BoxShadow(color: AppColors.gold.withValues(alpha: 0.18), blurRadius: 50),
+          BoxShadow(color: AppColors.gold.withValues(alpha: 0.07), blurRadius: 100),
         ] : [],
       ),
       padding: const EdgeInsets.all(22),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Personal Wallet', style: AppTypography.labelCaps),
+        Row(children: [
+          Text('Personal Wallet', style: AppTypography.labelCaps),
+          const SizedBox(width: 8),
+          async.maybeWhen(
+            data: (bal) => _statusPill(live: bal != null),
+            orElse: () => const SizedBox.shrink(),
+          ),
+        ]),
         const SizedBox(height: AppSpacing.sm),
-        RichText(text: TextSpan(children: [
-          TextSpan(text: '\$ ', style: AppTypography.displayXL.copyWith(color: AppColors.gold)),
-          TextSpan(text: NumberFormat.decimalPattern().format(_val), style: AppTypography.displayXL),
-        ])),
+        async.when(
+          data: (bal) => _balanceNumber(bal ?? _walletBalance),
+          loading: () => _skeleton(),
+          error: (_, __) => _balanceNumber(_walletBalance),
+        ),
         if (_glowing) ...[
           const SizedBox(height: 4),
-          Text('+\$ 1,200', style: AppTypography.dataS.copyWith(color: AppColors.emerald)),
+          Text('+\$ ${NumberFormat.decimalPattern().format(_delta)}', style: AppTypography.dataS.copyWith(color: AppColors.emerald)),
         ],
         const SizedBox(height: AppSpacing.md),
         const Divider(color: AppColors.borderSubtle, height: 1),
@@ -238,6 +244,41 @@ class _LiveBalanceState extends State<_LiveBalance> {
       ]),
     );
   }
+
+  // Count-up: animates from its current rendered value to each new balance.
+  Widget _balanceNumber(int value) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: value.toDouble()),
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOut,
+      builder: (_, val, __) => RichText(text: TextSpan(children: [
+        TextSpan(text: '\$ ', style: AppTypography.displayXL.copyWith(color: AppColors.gold)),
+        TextSpan(text: NumberFormat.decimalPattern().format(val.round()), style: AppTypography.displayXL),
+      ])),
+    );
+  }
+
+  Widget _statusPill({required bool live}) {
+    final c = live ? AppColors.emerald : AppColors.amber;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: c.withValues(alpha: 0.3)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(width: 5, height: 5, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
+        const SizedBox(width: 5),
+        Text(live ? 'Live' : 'Preview', style: AppTypography.label.copyWith(color: c, fontSize: 10, fontWeight: FontWeight.w600)),
+      ]),
+    );
+  }
+
+  Widget _skeleton() => Container(
+    width: 200, height: 40,
+    decoration: BoxDecoration(color: AppColors.bgInput, borderRadius: BorderRadius.circular(8)),
+  );
 }
 
 class _SubStat2 extends StatelessWidget {
