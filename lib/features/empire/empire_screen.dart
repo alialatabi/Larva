@@ -190,14 +190,17 @@ class _EmpireDashboard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.bgSurface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.borderSubtle),
+              GestureDetector(
+                onTap: () => context.push('/notifications'),
+                child: Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.bgSurface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.borderSubtle),
+                  ),
+                  child: const Icon(Icons.notifications_none_rounded, color: AppColors.textPrimary, size: 18),
                 ),
-                child: const Icon(Icons.notifications_none_rounded, color: AppColors.textPrimary, size: 18),
               ),
             ]),
           ]),

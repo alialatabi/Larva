@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
@@ -138,7 +139,7 @@ class _Header extends StatelessWidget {
             button: true,
             child: Stack(clipBehavior: Clip.none, children: [
               Pressable(
-                onTap: () {},
+                onTap: () => context.push('/notifications'),
                 child: Container(
                   width: 40, height: 40,
                   decoration: BoxDecoration(

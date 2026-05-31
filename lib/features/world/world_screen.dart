@@ -1,357 +1,517 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 
-// ── Deterministic price-history generator ────────────────────────────────────
+// ── Data models ───────────────────────────────────────────────────────────────
 
-double _rng(double seed) {
-  final x = math.sin(seed) * 10000;
-  return x - x.floor();
-}
-
-List<double> _makeHistory(double start, double vol, double trend, {int n = 60}) {
-  final prices = [start];
-  for (int i = 1; i < n; i++) {
-    final drift = (_rng(start * 1000 + i) - 0.5) * vol + trend;
-    prices.add(math.max(0.5, prices[i - 1] + drift));
-  }
-  return prices.map((p) => double.parse(p.toStringAsFixed(2))).toList();
-}
-
-// ── Data ──────────────────────────────────────────────────────────────────────
-
-class _StockData {
-  _StockData({
-    required this.id, required this.name, required this.sector, required this.country,
-    required this.price, required this.delta, required this.deltaPct,
-    required this.vol, required this.mktCap, required this.pe, required this.yld,
-    required this.history, this.watched = false,
+class _WorldEvent {
+  const _WorldEvent({
+    required this.id,
+    required this.title,
+    required this.category,
+    required this.scope,
+    required this.severity, // 1 Minor · 2 Moderate · 3 Major
+    required this.cyclesLeft,
+    required this.affectsMe,
+    required this.summary,
+    required this.icon,
+    required this.effects,
   });
-  final String id, name, sector, country, mktCap;
-  final double price, delta, deltaPct, pe, yld;
-  final int vol;
-  final List<double> history;
-  bool watched;
+  final int id, severity, cyclesLeft;
+  final String title, category, scope, summary, icon;
+  final bool affectsMe;
+  final List<String> effects;
 }
 
-class _PositionData {
-  const _PositionData({required this.id, required this.shares, required this.avgCost, required this.current});
-  final String id;
-  final int shares;
-  final double avgCost, current;
+class _WorldCountry {
+  const _WorldCountry({
+    required this.id,
+    required this.name,
+    required this.region,
+    required this.tier,
+    required this.living,
+    required this.tax,
+    required this.wage,
+    required this.advantage,
+    required this.tags,
+    this.isHome = false,
+  });
+  final String id, name, region, tier, living, tax, wage, advantage;
+  final List<String> tags;
+  final bool isHome;
 }
 
-final _stocks = [
-  _StockData(id: 'VLTF', name: 'Volta Foods Inc.',     sector: 'Food & Hospitality', country: 'Caedoria', price: 12.40, delta: -0.30, deltaPct: -2.4, vol: 12400, mktCap: '\$12.4M', pe: 8.2,  yld: 3.4, history: _makeHistory(16, 0.45, -0.04), watched: false),
-  _StockData(id: 'HAZT', name: 'Horizon Tech Ltd.',    sector: 'Technology',          country: 'Eltria',   price: 34.80, delta:  1.20, deltaPct:  3.6, vol: 8200,  mktCap: '\$34.8M', pe: 18.4, yld: 0.8, history: _makeHistory(22, 0.60,  0.13), watched: true),
-  _StockData(id: 'CRMK', name: 'Caedoria Retail Mkts', sector: 'Retail',              country: 'Caedoria', price:  8.15, delta:  0.05, deltaPct:  0.6, vol: 4100,  mktCap: '\$8.2M',  pe: 11.2, yld: 5.1, history: _makeHistory( 8, 0.25,  0.003), watched: false),
-  _StockData(id: 'NEXL', name: 'Nexlogic Freight',     sector: 'Logistics',           country: 'Brimark',  price: 21.60, delta: -0.80, deltaPct: -3.6, vol: 6800,  mktCap: '\$21.6M', pe: 14.1, yld: 2.2, history: _makeHistory(18, 0.90,  0.04), watched: false),
-  _StockData(id: 'MFXA', name: 'Morrath Fabrication',  sector: 'Manufacturing',       country: 'Morrath',  price:  6.90, delta: -0.15, deltaPct: -2.1, vol: 3200,  mktCap: '\$6.9M',  pe: 7.8,  yld: 4.8, history: _makeHistory(10, 0.35, -0.01), watched: false),
+// ── Mock data ─────────────────────────────────────────────────────────────────
+
+const _events = <_WorldEvent>[
+  _WorldEvent(
+    id: 1, title: 'Labor Strike', category: 'Labor', scope: 'Caedoria', severity: 3,
+    cyclesLeft: 3, affectsMe: true, icon: '✊',
+    summary: 'Workers across Caedoria have walked out, demanding higher wages. Output is throttled until the dispute resolves.',
+    effects: ['Production −30% in Caedoria', 'Salary demands +12%', 'Resolves faster with high Negotiation'],
+  ),
+  _WorldEvent(
+    id: 2, title: 'Technology Generation Shift', category: 'Technology', scope: 'Global', severity: 2,
+    cyclesLeft: 5, affectsMe: true, icon: '💻',
+    summary: 'A new hardware generation just shipped. Last-gen electronics inventory is losing value fast.',
+    effects: ['Electronics resale −18%', 'Tech demand +25%', 'Restock at new cost basis'],
+  ),
+  _WorldEvent(
+    id: 3, title: 'Logistics Disruption', category: 'Supply Chain', scope: 'Western', severity: 2,
+    cyclesLeft: 2, affectsMe: false, icon: '🚧',
+    summary: 'Freight corridors through the Western region are congested. Cross-country deliveries are delayed.',
+    effects: ['Delivery time +1 cycle', 'Logistics surcharge +15%', 'Spoilage risk elevated'],
+  ),
+  _WorldEvent(
+    id: 4, title: 'Fashion Shift', category: 'Fashion', scope: 'Global', severity: 1,
+    cyclesLeft: 4, affectsMe: false, icon: '👗',
+    summary: 'Consumer taste has moved. Clothing stocked to the old trend now sells at a discount.',
+    effects: ['Out-of-trend apparel −10%', 'On-trend apparel +20%', 'Design & Aesthetics softens loss'],
+  ),
+  _WorldEvent(
+    id: 5, title: 'Local Health Outbreak', category: 'Health', scope: 'Vareth', severity: 3,
+    cyclesLeft: 6, affectsMe: false, icon: '🏥',
+    summary: 'A health outbreak in Vareth is spiking demand for pharmacy and healthcare services.',
+    effects: ['Pharmacy demand +40%', 'Workforce availability −15%', 'Health needs decay faster'],
+  ),
+  _WorldEvent(
+    id: 6, title: 'Construction Boom', category: 'Natural', scope: 'Dalthorn', severity: 1,
+    cyclesLeft: 7, affectsMe: false, icon: '🏗',
+    summary: 'Public infrastructure investment in Dalthorn is driving a construction boom.',
+    effects: ['Construction contracts +30%', 'Raw material demand +20%', 'Property values rising'],
+  ),
+  _WorldEvent(
+    id: 7, title: 'Interest Rate Hike', category: 'Financial', scope: 'Global', severity: 2,
+    cyclesLeft: 3, affectsMe: true, icon: '🏦',
+    summary: 'The Central Bank raised base rates. New loans cost more; deposit yields improve.',
+    effects: ['New loan rates +2%', 'Deposit yields +1.5%', 'Stock valuations compress'],
+  ),
 ];
 
-const _portfolio = [
-  _PositionData(id: 'HAZT', shares: 150, avgCost: 31.20, current: 34.80),
-  _PositionData(id: 'CRMK', shares: 400, avgCost:  8.40, current:  8.15),
-  _PositionData(id: 'VLTF', shares: 200, avgCost: 11.80, current: 12.40),
+const _categories = ['All', 'Technology', 'Health', 'Fashion', 'Supply Chain', 'Financial', 'Labor', 'Natural', 'Regulatory'];
+
+const _countries = <_WorldCountry>[
+  _WorldCountry(id: 'caedoria', name: 'Caedoria', region: 'Central', tier: 'Industrial', living: '\$ 1,200', tax: '12%', wage: 'Medium', advantage: 'Food & Logistics', tags: ['Industrial', 'Low logistics cost', 'Medium wages'], isHome: true),
+  _WorldCountry(id: 'nova',     name: 'Nova',     region: 'Central', tier: 'Starter',    living: '\$ 950',   tax: '10%', wage: 'Medium', advantage: 'Balanced',         tags: ['Balanced economy', 'Low competition', 'All sectors']),
+  _WorldCountry(id: 'korr',     name: 'Korr',     region: 'Western', tier: 'Industrial', living: '\$ 800',   tax: '8%',  wage: 'Low',    advantage: 'Manufacturing',    tags: ['Manufacturing hub', 'Cheap labor', 'Resource-rich']),
+  _WorldCountry(id: 'valen',    name: 'Valen',    region: 'Central', tier: 'Finance',    living: '\$ 1,800', tax: '18%', wage: 'High',   advantage: 'Finance',          tags: ['Finance hub', 'Strict regulation', 'High wages']),
+  _WorldCountry(id: 'aurel',    name: 'Aurel',    region: 'Northern', tier: 'Premium',   living: '\$ 2,400', tax: '22%', wage: 'High',   advantage: 'Luxury Retail',    tags: ['Luxury market', 'High spending', 'Elite workforce']),
+  _WorldCountry(id: 'kethos',   name: 'Kethos',   region: 'Eastern', tier: 'Mining',     living: '\$ 780',   tax: '7%',  wage: 'Low',    advantage: 'Mining',           tags: ['Mining', 'Metals & minerals', 'Low infrastructure']),
+  _WorldCountry(id: 'solven',   name: 'Solven',   region: 'Central', tier: 'Pharma',     living: '\$ 1,500', tax: '14%', wage: 'High',   advantage: 'Pharmaceutical',   tags: ['Pharmaceutical', 'Healthcare', 'Skilled workforce']),
+  _WorldCountry(id: 'pella',    name: 'Pella',    region: 'Eastern', tier: 'Tech',       living: '\$ 1,600', tax: '12%', wage: 'High',   advantage: 'Technology',       tags: ['Tech hub', 'High spending', 'Talent pool']),
+  _WorldCountry(id: 'tyrn',     name: 'Tyrn',     region: 'Southern', tier: 'Frontier',  living: '\$ 750',   tax: '5%',  wage: 'Low',    advantage: 'Frontier',         tags: ['Raw frontier', '3 resources', 'Lowest tax']),
+  _WorldCountry(id: 'dalthorn', name: 'Dalthorn', region: 'Western', tier: 'Resource',   living: '\$ 1,000', tax: '11%', wage: 'Medium', advantage: 'Construction',     tags: ['Resource-rich', 'Construction', 'Medium tax']),
+  _WorldCountry(id: 'ventrex',  name: 'Ventrex',  region: 'Northern', tier: 'Finance',   living: '\$ 1,900', tax: '15%', wage: 'High',   advantage: 'Finance',          tags: ['High wages', 'Finance presence', 'Low tax']),
+  _WorldCountry(id: 'morrath',  name: 'Morrath',  region: 'Northern', tier: 'Industrial', living: '\$ 820',  tax: '9%',  wage: 'Low',    advantage: 'Heavy Industry',   tags: ['Heavy industry', 'Low wages', 'Union-heavy']),
+  _WorldCountry(id: 'brimark',  name: 'Brimark',  region: 'Central', tier: 'Logistics',  living: '\$ 1,300', tax: '12%', wage: 'Medium', advantage: 'Logistics',        tags: ['Logistics hub', 'Central location', 'Medium wages']),
+  _WorldCountry(id: 'vareth',   name: 'Vareth',   region: 'Eastern', tier: 'Health',     living: '\$ 1,450', tax: '13%', wage: 'Medium', advantage: 'Healthcare',       tags: ['Healthcare', 'Pharmaceutical demand', 'Stable economy']),
+  _WorldCountry(id: 'orvalle',  name: 'Orvalle',  region: 'Southern', tier: 'Mining',    living: '\$ 760',   tax: '8%',  wage: 'Low',    advantage: 'Mining',           tags: ['Mining', 'Raw materials', 'Low wages']),
+  _WorldCountry(id: 'quelmont', name: 'Quelmont', region: 'Western', tier: 'Education',  living: '\$ 1,700', tax: '16%', wage: 'High',   advantage: 'Education',        tags: ['Education', 'Skilled workforce', 'High wages']),
+  _WorldCountry(id: 'soltarn',  name: 'Soltarn',  region: 'Eastern', tier: 'Service',    living: '\$ 1,350', tax: '13%', wage: 'Medium', advantage: 'Hospitality',      tags: ['Tourism', 'Entertainment', 'Service economy']),
+  _WorldCountry(id: 'halveth',  name: 'Halveth',  region: 'Southern', tier: 'Offshore',  living: '\$ 1,850', tax: '8%',  wage: 'High',   advantage: 'Offshore Finance', tags: ['Offshore banking', '8% tax', 'International']),
 ];
 
-const _sectorFilters = ['All Sectors', 'Food & Hospitality', 'Technology', 'Retail', 'Logistics', 'Manufacturing'];
+const _regions = ['All', 'Northern', 'Central', 'Western', 'Eastern', 'Southern'];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+({String label, Color color}) _severityMeta(int s) {
+  switch (s) {
+    case 3:  return (label: 'MAJOR',    color: AppColors.crimson);
+    case 2:  return (label: 'MODERATE', color: AppColors.amber);
+    default: return (label: 'MINOR',    color: AppColors.sky);
+  }
+}
+
+const _regionColors = <String, Color>{
+  'Northern': AppColors.sky,
+  'Central':  AppColors.gold,
+  'Western':  AppColors.violet,
+  'Eastern':  Color(0xFF4AE8C9),
+  'Southern': AppColors.amber,
+};
 
 // ── WorldScreen ───────────────────────────────────────────────────────────────
 
 class WorldScreen extends StatefulWidget {
   const WorldScreen({super.key});
+
   @override
   State<WorldScreen> createState() => _WorldScreenState();
 }
 
-class _WorldScreenState extends State<WorldScreen> {
-  _StockData? _selectedStock;
+class _WorldScreenState extends State<WorldScreen> with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabs = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bgBase,
       body: SafeArea(
-        child: _selectedStock == null
-            ? _MarketOverview(
-                stocks: _stocks,
-                onSelect: (s) => setState(() => _selectedStock = s),
-                onToggleWatch: (id) => setState(() {
-                  final s = _stocks.firstWhere((s) => s.id == id);
-                  s.watched = !s.watched;
-                }),
-              )
-            : _StockDetail(
-                stock: _selectedStock!,
-                onBack: () => setState(() => _selectedStock = null),
+        bottom: false,
+        child: Column(children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(AppSpacing.screenH, AppSpacing.md, AppSpacing.screenH, AppSpacing.md),
+            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('The World', style: AppTypography.displayM.copyWith(fontSize: 24)),
+                const SizedBox(height: 2),
+                Text('18 countries · one shared economy', style: AppTypography.labelCaps),
+              ]),
+              Semantics(
+                label: 'Open notifications',
+                button: true,
+                child: GestureDetector(
+                  onTap: () => context.push('/notifications'),
+                  child: Container(
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.bgSurface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.borderSubtle),
+                    ),
+                    child: const Icon(Icons.notifications_none_rounded, color: AppColors.textPrimary, size: 18),
+                  ),
+                ),
               ),
+            ]),
+          ),
+          // Tabs
+          Container(
+            decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.borderSubtle))),
+            child: TabBar(
+              controller: _tabs,
+              labelColor: AppColors.gold,
+              unselectedLabelColor: AppColors.textTertiary,
+              labelStyle: AppTypography.bodyS.copyWith(fontWeight: FontWeight.w600),
+              unselectedLabelStyle: AppTypography.bodyS,
+              indicatorColor: AppColors.gold,
+              indicatorWeight: 2,
+              tabs: const [Tab(text: 'Events'), Tab(text: 'Countries')],
+            ),
+          ),
+          Expanded(child: TabBarView(
+            controller: _tabs,
+            children: const [_EventsFeed(), _CountryBrowser()],
+          )),
+        ]),
       ),
     );
   }
 }
 
-// ── Market Overview ───────────────────────────────────────────────────────────
+// ── Events Feed ───────────────────────────────────────────────────────────────
 
-class _MarketOverview extends StatefulWidget {
-  const _MarketOverview({required this.stocks, required this.onSelect, required this.onToggleWatch});
-  final List<_StockData> stocks;
-  final ValueChanged<_StockData> onSelect;
-  final ValueChanged<String> onToggleWatch;
+class _EventsFeed extends StatefulWidget {
+  const _EventsFeed();
   @override
-  State<_MarketOverview> createState() => _MarketOverviewState();
+  State<_EventsFeed> createState() => _EventsFeedState();
 }
 
-class _MarketOverviewState extends State<_MarketOverview> {
-  int _tab = 0; // 0=listed, 1=portfolio, 2=watchlist
-  String _sectorFilter = 'All Sectors';
+class _EventsFeedState extends State<_EventsFeed> {
+  String _cat = 'All';
 
   @override
   Widget build(BuildContext context) {
-    final upCount = widget.stocks.where((s) => s.deltaPct > 0).length;
-    final sentiment = upCount / widget.stocks.length;
-
-    final filtered = widget.stocks.where((s) {
-      final sectorOk = _sectorFilter == 'All Sectors' || s.sector == _sectorFilter;
-      final tabOk = _tab != 2 || s.watched;
-      return sectorOk && tabOk;
-    }).toList();
-
-    final portVal  = _portfolio.fold(0.0, (s, p) => s + p.shares * p.current);
-    final portCost = _portfolio.fold(0.0, (s, p) => s + p.shares * p.avgCost);
-    final portGain = portVal - portCost;
-    final portGainP = portCost > 0 ? (portGain / portCost * 100) : 0.0;
+    final filtered = _events.where((e) => _cat == 'All' || e.category == _cat).toList()
+      ..sort((a, b) => b.severity.compareTo(a.severity));
+    final affecting = _events.where((e) => e.affectsMe).length;
 
     return Column(children: [
-      // Header + market stats
-      Padding(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.screenH, AppSpacing.md, AppSpacing.screenH, 0),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Stock Market', style: AppTypography.displayM.copyWith(fontSize: 22)),
-          const SizedBox(height: 12),
-          Row(children: [
-            _MarketStat(label: 'Market Cap',  val: '\$${(widget.stocks.fold(0.0, (s, st) => s + double.parse(st.mktCap.replaceAll(RegExp(r'[\$M]'), ''))) ).toStringAsFixed(1)}M'),
-            _StatDivider3(),
-            _MarketStat(label: 'Sentiment',   val: '${(sentiment * 100).round()}% ↑', color: sentiment > 0.5 ? AppColors.emerald : AppColors.crimson),
-            _StatDivider3(),
-            _MarketStat(label: 'Vol Today',   val: NumberFormat.compact().format(widget.stocks.fold(0, (s, st) => s + st.vol))),
-          ]),
-          const SizedBox(height: 14),
-        ]),
-      ),
-      // Tabs
+      // Summary strip
       Container(
-        decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.borderSubtle))),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenH, vertical: 14),
+        decoration: const BoxDecoration(
+          color: AppColors.bgSurface,
+          border: Border(bottom: BorderSide(color: AppColors.borderSubtle)),
+        ),
         child: Row(children: [
-          for (final t in ['Listed', 'Portfolio', 'Watchlist'])
-            Expanded(child: GestureDetector(
-              onTap: () => setState(() => _tab = ['Listed', 'Portfolio', 'Watchlist'].indexOf(t)),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                padding: const EdgeInsets.symmetric(vertical: 9),
-                decoration: BoxDecoration(border: Border(bottom: BorderSide(
-                  color: _tab == ['Listed', 'Portfolio', 'Watchlist'].indexOf(t) ? AppColors.gold : Colors.transparent,
-                  width: 2,
-                ))),
-                child: Text(t, style: AppTypography.label.copyWith(
-                  color: _tab == ['Listed', 'Portfolio', 'Watchlist'].indexOf(t) ? AppColors.gold : AppColors.textTertiary,
-                  fontWeight: _tab == ['Listed', 'Portfolio', 'Watchlist'].indexOf(t) ? FontWeight.w600 : FontWeight.w400,
-                ), textAlign: TextAlign.center),
-              ),
-            )),
+          _SummaryStat(label: 'Active', value: '${_events.length}'),
+          _VDivider(),
+          _SummaryStat(label: 'Affecting You', value: '$affecting', valueColor: AppColors.amber),
+          _VDivider(),
+          _SummaryStat(label: 'Global', value: '${_events.where((e) => e.scope == 'Global').length}'),
         ]),
       ),
-      // Sector filter
-      Padding(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.screenH, AppSpacing.md, AppSpacing.screenH, 0),
-        child: SizedBox(
-          height: 30,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: _sectorFilters.map((f) => GestureDetector(
-              onTap: () => setState(() => _sectorFilter = f),
-              child: Container(
-                margin: const EdgeInsets.only(right: 5),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _sectorFilter == f ? AppColors.gold.withOpacity(0.1) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: _sectorFilter == f ? AppColors.gold : AppColors.borderDefault),
-                ),
-                child: Text(f, style: AppTypography.label.copyWith(
-                  color: _sectorFilter == f ? AppColors.gold : AppColors.textTertiary,
-                  fontWeight: FontWeight.w500, fontSize: 11,
-                )),
-              ),
-            )).toList(),
-          ),
+      // Category chips
+      SizedBox(
+        height: 54,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenH, vertical: 12),
+          children: [
+            for (final c in _categories) ...[
+              _FilterChip(label: c, active: _cat == c, onTap: () => setState(() => _cat = c)),
+              const SizedBox(width: 6),
+            ],
+          ],
         ),
       ),
-      const SizedBox(height: 12),
-
-      // Portfolio summary (when portfolio tab)
-      if (_tab == 1) Padding(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.screenH, 0, AppSpacing.screenH, 12),
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.bgSurface,
-            borderRadius: BorderRadius.circular(AppRadius.card),
-            border: Border.all(color: AppColors.borderSubtle),
-          ),
-          padding: const EdgeInsets.all(14),
-          child: Row(children: [
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Portfolio Value', style: AppTypography.labelCaps),
-              RichText(text: TextSpan(children: [
-                TextSpan(text: '\$ ', style: AppTypography.dataL.copyWith(color: AppColors.gold)),
-                TextSpan(text: NumberFormat.decimalPattern().format(portVal.round()), style: AppTypography.dataL),
-              ])),
-            ]),
-            const Spacer(),
-            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text(
-                '${portGain >= 0 ? '+' : ''}\$ ${NumberFormat.decimalPattern().format(portGain.round())}',
-                style: AppTypography.dataS.copyWith(color: portGain >= 0 ? AppColors.emerald : AppColors.crimson),
-              ),
-              Text(
-                '${portGainP >= 0 ? '+' : ''}${portGainP.toStringAsFixed(1)}%',
-                style: AppTypography.dataS.copyWith(color: portGain >= 0 ? AppColors.emerald : AppColors.crimson, fontSize: 11),
-              ),
-            ]),
-          ]),
-        ),
-      ),
-
-      // Stock list
-      Expanded(child: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenH),
-        children: [
-          if (_tab == 1)
-            ..._portfolio.map((pos) {
-              final stock = widget.stocks.firstWhere((s) => s.id == pos.id);
-              final gain = (pos.current - pos.avgCost) * pos.shares;
-              return _StockCard(
-                stock: stock,
-                onTap: () => widget.onSelect(stock),
-                onToggleWatch: () => widget.onToggleWatch(stock.id),
-                extra: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Text('${pos.shares} shares', style: AppTypography.labelCaps.copyWith(fontSize: 10)),
-                  Text(
-                    '${gain >= 0 ? '+' : ''}\$ ${NumberFormat.decimalPattern().format(gain.round())}',
-                    style: AppTypography.dataS.copyWith(fontSize: 11, color: gain >= 0 ? AppColors.emerald : AppColors.crimson),
-                  ),
-                ]),
-              );
-            })
-          else
-            ...filtered.map((s) => _StockCard(
-              stock: s,
-              onTap: () => widget.onSelect(s),
-              onToggleWatch: () => widget.onToggleWatch(s.id),
+      // List
+      Expanded(child: filtered.isEmpty
+          ? const _Empty(icon: Icons.event_busy, message: 'No events in this category')
+          : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.screenH, 4, AppSpacing.screenH, AppSpacing.x3l),
+              itemCount: filtered.length,
+              itemBuilder: (_, i) => _EventCard(event: filtered[i]),
             )),
-          const SizedBox(height: AppSpacing.xl),
-        ],
-      )),
     ]);
   }
 }
 
-class _MarketStat extends StatelessWidget {
-  const _MarketStat({required this.label, required this.val, this.color});
-  final String label, val;
-  final Color? color;
-  @override
-  Widget build(BuildContext context) => Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-    Text(label, style: AppTypography.labelCaps.copyWith(fontSize: 10)),
-    const SizedBox(height: 3),
-    Text(val, style: AppTypography.dataS.copyWith(fontSize: 13, color: color ?? AppColors.textPrimary)),
-  ]));
-}
-
-class _StatDivider3 extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Container(width: 1, height: 28, color: AppColors.borderSubtle, margin: const EdgeInsets.symmetric(horizontal: 12));
-}
-
-// ── Stock Card ────────────────────────────────────────────────────────────────
-
-class _StockCard extends StatelessWidget {
-  const _StockCard({required this.stock, required this.onTap, required this.onToggleWatch, this.extra});
-  final _StockData stock;
-  final VoidCallback onTap, onToggleWatch;
-  final Widget? extra;
+class _EventCard extends StatelessWidget {
+  const _EventCard({required this.event});
+  final _WorldEvent event;
 
   @override
   Widget build(BuildContext context) {
-    final up = stock.deltaPct >= 0;
+    final sev = _severityMeta(event.severity);
     return GestureDetector(
-      onTap: onTap,
+      onTap: () => showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => _EventDetailSheet(event: event),
+      ),
+      behavior: HitTestBehavior.opaque,
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         decoration: BoxDecoration(
           color: AppColors.bgSurface,
           borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: AppColors.borderSubtle),
+          border: Border.all(color: event.affectsMe ? sev.color.withValues(alpha: 0.45) : AppColors.borderSubtle),
+          boxShadow: event.affectsMe ? [BoxShadow(color: sev.color.withValues(alpha: 0.06), blurRadius: 16)] : [],
         ),
         padding: const EdgeInsets.all(14),
-        child: Column(children: [
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(
+              color: AppColors.bgElevated,
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(color: AppColors.borderDefault),
+            ),
+            child: Center(child: Text(event.icon, style: const TextStyle(fontSize: 22))),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(color: sev.color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(4)),
+                child: Text(sev.label, style: AppTypography.labelCaps.copyWith(color: sev.color, fontSize: 9, fontWeight: FontWeight.w700)),
+              ),
+              const SizedBox(width: 6),
+              Text('${event.category} · ${event.scope}', style: AppTypography.labelCaps.copyWith(fontSize: 11)),
+            ]),
+            const SizedBox(height: 5),
+            Text(event.title, style: AppTypography.headingS.copyWith(
+              color: event.affectsMe ? AppColors.textPrimary : AppColors.textSecondary,
+            )),
+            const SizedBox(height: 3),
+            Text(event.summary, style: AppTypography.bodyS.copyWith(fontSize: 11, height: 1.4), maxLines: 2, overflow: TextOverflow.ellipsis),
+            if (event.affectsMe) ...[
+              const SizedBox(height: 6),
+              Row(children: [
+                Icon(Icons.warning_amber_rounded, size: 11, color: sev.color),
+                const SizedBox(width: 4),
+                Text('Affecting your companies', style: AppTypography.labelCaps.copyWith(color: sev.color, fontSize: 11)),
+              ]),
+            ],
+          ])),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(color: AppColors.bgElevated, borderRadius: BorderRadius.circular(6)),
+            child: Column(children: [
+              Text('${event.cyclesLeft}', style: AppTypography.dataM.copyWith(fontSize: 15)),
+              Text('cycles', style: AppTypography.labelCaps.copyWith(fontSize: 9)),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _EventDetailSheet extends StatelessWidget {
+  const _EventDetailSheet({required this.event});
+  final _WorldEvent event;
+
+  @override
+  Widget build(BuildContext context) {
+    final sev = _severityMeta(event.severity);
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.bgSurface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
+      ),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.screenH, 12, AppSpacing.screenH, 32),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: AppColors.borderStrong, borderRadius: BorderRadius.circular(2)))),
+        const SizedBox(height: 18),
+        Row(children: [
+          Container(
+            width: 52, height: 52,
+            decoration: BoxDecoration(color: AppColors.bgElevated, borderRadius: BorderRadius.circular(13), border: Border.all(color: AppColors.borderDefault)),
+            child: Center(child: Text(event.icon, style: const TextStyle(fontSize: 26))),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(event.title, style: AppTypography.headingL),
+            Text('${event.category} · ${event.scope}', style: AppTypography.bodyM.copyWith(color: AppColors.textSecondary)),
+          ])),
+        ]),
+        const SizedBox(height: 16),
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(color: sev.color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6), border: Border.all(color: sev.color.withValues(alpha: 0.3))),
+            child: Text('${sev.label} SEVERITY', style: AppTypography.label.copyWith(color: sev.color, fontWeight: FontWeight.w700)),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(color: AppColors.bgElevated, borderRadius: BorderRadius.circular(6)),
+            child: Text('${event.cyclesLeft} cycles left', style: AppTypography.dataS.copyWith(fontSize: 12)),
+          ),
+        ]),
+        const SizedBox(height: 16),
+        Text(event.summary, style: AppTypography.bodyM.copyWith(color: AppColors.textPrimary, height: 1.5)),
+        const SizedBox(height: 18),
+        Text('EFFECTS', style: AppTypography.labelCaps.copyWith(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 10),
+        for (final fx in event.effects)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(Icons.arrow_right_alt, size: 16, color: sev.color),
+              const SizedBox(width: 8),
+              Expanded(child: Text(fx, style: AppTypography.bodyM.copyWith(color: AppColors.textSecondary, fontSize: 13))),
+            ]),
+          ),
+      ]),
+    );
+  }
+}
+
+// ── Country Browser ───────────────────────────────────────────────────────────
+
+class _CountryBrowser extends StatefulWidget {
+  const _CountryBrowser();
+  @override
+  State<_CountryBrowser> createState() => _CountryBrowserState();
+}
+
+class _CountryBrowserState extends State<_CountryBrowser> {
+  String _region = 'All';
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _countries.where((c) => _region == 'All' || c.region == _region).toList();
+
+    return Column(children: [
+      SizedBox(
+        height: 54,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenH, vertical: 12),
+          children: [
+            for (final r in _regions) ...[
+              _FilterChip(
+                label: r,
+                active: _region == r,
+                accent: _regionColors[r] ?? AppColors.gold,
+                onTap: () => setState(() => _region = r),
+              ),
+              const SizedBox(width: 6),
+            ],
+          ],
+        ),
+      ),
+      Expanded(child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.screenH, 4, AppSpacing.screenH, AppSpacing.x3l),
+        itemCount: filtered.length,
+        itemBuilder: (_, i) => _CountryCard(country: filtered[i]),
+      )),
+    ]);
+  }
+}
+
+class _CountryCard extends StatelessWidget {
+  const _CountryCard({required this.country});
+  final _WorldCountry country;
+
+  @override
+  Widget build(BuildContext context) {
+    final rc = _regionColors[country.region] ?? AppColors.gold;
+    return GestureDetector(
+      onTap: () => showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => _CountryDetailSheet(country: country),
+      ),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: AppColors.bgSurface,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: country.isHome ? AppColors.gold.withValues(alpha: 0.4) : AppColors.borderSubtle),
+        ),
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Text(stock.id, style: AppTypography.dataS.copyWith(fontSize: 13, color: AppColors.gold)),
-                const SizedBox(width: 6),
-                const Text('·', style: TextStyle(color: AppColors.textTertiary, fontSize: 11)),
-                const SizedBox(width: 6),
-                Expanded(child: Text(stock.name, style: AppTypography.bodyS.copyWith(fontSize: 12), overflow: TextOverflow.ellipsis)),
-              ]),
-              const SizedBox(height: 3),
-              Text('${stock.sector} · ${stock.country}', style: AppTypography.labelCaps.copyWith(fontSize: 11)),
-            ])),
-            GestureDetector(
-              onTap: onToggleWatch,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: Text(stock.watched ? '★' : '☆', style: TextStyle(color: stock.watched ? AppColors.gold : AppColors.borderStrong, fontSize: 16)),
-              ),
-            ),
-          ]),
-          const SizedBox(height: 12),
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('\$ ${stock.price.toStringAsFixed(2)}', style: AppTypography.dataL.copyWith(fontSize: 22)),
-              const SizedBox(height: 3),
-              Row(children: [
-                Text('${up ? '+' : ''}${stock.delta.toStringAsFixed(2)}', style: AppTypography.dataS.copyWith(fontSize: 12, color: up ? AppColors.emerald : AppColors.crimson)),
-                const SizedBox(width: 6),
+                Text(country.name, style: AppTypography.headingS.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: country.isHome ? AppColors.gold : AppColors.textPrimary,
+                )),
+                const SizedBox(width: 7),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: (up ? AppColors.emerald : AppColors.crimson).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Row(children: [
-                    Icon(up ? Icons.arrow_upward : Icons.arrow_downward, size: 9, color: up ? AppColors.emerald : AppColors.crimson),
-                    Text('${stock.deltaPct.abs().toStringAsFixed(1)}%', style: AppTypography.dataS.copyWith(fontSize: 11, color: up ? AppColors.emerald : AppColors.crimson)),
-                  ]),
+                  decoration: BoxDecoration(color: rc.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4), border: Border.all(color: rc.withValues(alpha: 0.3))),
+                  child: Text(country.region.toUpperCase(), style: AppTypography.labelCaps.copyWith(fontSize: 9, fontWeight: FontWeight.w600, color: rc)),
                 ),
+                if (country.isHome) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(color: AppColors.gold.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(4)),
+                    child: Text('HOME', style: AppTypography.labelCaps.copyWith(fontSize: 9, fontWeight: FontWeight.w700, color: AppColors.gold)),
+                  ),
+                ],
               ]),
-            ]),
-            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text('Vol ${NumberFormat.compact().format(stock.vol)}', style: AppTypography.labelCaps.copyWith(fontSize: 10)),
-              Text('Cap ${stock.mktCap}', style: AppTypography.bodyS.copyWith(fontSize: 11)),
               const SizedBox(height: 3),
-              Row(children: [
-                Text('P/E ', style: AppTypography.labelCaps.copyWith(fontSize: 10)),
-                Text('${stock.pe}', style: AppTypography.dataS.copyWith(fontSize: 10, color: AppColors.textSecondary)),
-                const SizedBox(width: 10),
-                Text('Yld ', style: AppTypography.labelCaps.copyWith(fontSize: 10)),
-                Text('${stock.yld}%', style: AppTypography.dataS.copyWith(fontSize: 10, color: AppColors.emerald)),
-              ]),
-              if (extra != null) ...[const SizedBox(height: 4), extra!],
+              Text('${country.tier} · advantage: ${country.advantage}', style: AppTypography.bodyS.copyWith(fontSize: 11)),
+            ])),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text(country.living, style: AppTypography.dataS.copyWith(fontSize: 13, color: AppColors.gold)),
+              Text('living/cycle', style: AppTypography.labelCaps.copyWith(fontSize: 9)),
             ]),
+          ]),
+          const SizedBox(height: 10),
+          Row(children: [
+            _MiniMetric(label: 'Tax', value: country.tax),
+            const SizedBox(width: 16),
+            _MiniMetric(label: 'Wages', value: country.wage),
           ]),
         ]),
       ),
@@ -359,404 +519,169 @@ class _StockCard extends StatelessWidget {
   }
 }
 
-// ── Stock Detail Screen ───────────────────────────────────────────────────────
-
-class _StockDetail extends StatefulWidget {
-  const _StockDetail({required this.stock, required this.onBack});
-  final _StockData stock;
-  final VoidCallback onBack;
-  @override
-  State<_StockDetail> createState() => _StockDetailState();
-}
-
-class _StockDetailState extends State<_StockDetail> {
-  int _range = 60;
-  bool _showTradeSheet = false;
-  bool _isBuy = true;
-  int _qty = 10;
+class _CountryDetailSheet extends StatelessWidget {
+  const _CountryDetailSheet({required this.country});
+  final _WorldCountry country;
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.stock;
-    final up = s.deltaPct >= 0;
-    final pos = _portfolio.where((p) => p.id == s.id).firstOrNull;
-
-    return Stack(children: [
-      Column(children: [
-        // Header
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-          child: Row(children: [
-            GestureDetector(
-              onTap: widget.onBack,
-              child: Container(width: 36, height: 36, decoration: BoxDecoration(color: AppColors.bgSurface, borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.borderSubtle)), child: const Icon(Icons.arrow_back, color: AppColors.textPrimary, size: 16)),
-            ),
-            const SizedBox(width: 12),
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(s.id, style: AppTypography.headingM.copyWith(color: AppColors.gold)),
-              Text(s.name, style: AppTypography.labelCaps.copyWith(fontSize: 11)),
-            ]),
-          ]),
-        ),
-
-        Expanded(child: ListView(padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenH), children: [
-          // Price hero
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('\$ ${s.price.toStringAsFixed(2)}', style: AppTypography.displayL),
-            const SizedBox(height: 4),
-            Row(children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: (up ? AppColors.emerald : AppColors.crimson).withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-                child: Row(children: [
-                  Icon(up ? Icons.arrow_upward : Icons.arrow_downward, size: 10, color: up ? AppColors.emerald : AppColors.crimson),
-                  const SizedBox(width: 4),
-                  Text('${up ? '+' : ''}${s.delta.toStringAsFixed(2)} (${s.deltaPct.toStringAsFixed(1)}%)', style: AppTypography.dataS.copyWith(fontSize: 12, color: up ? AppColors.emerald : AppColors.crimson)),
-                ]),
-              ),
-            ]),
-          ]),
-          const SizedBox(height: 16),
-
-          // Range selector
-          Row(children: [
-            for (final r in [10, 30, 60]) GestureDetector(
-              onTap: () => setState(() => _range = r),
-              child: Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _range == r ? AppColors.gold.withOpacity(0.1) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: _range == r ? AppColors.gold : AppColors.borderDefault),
-                ),
-                child: Text('${r}C', style: AppTypography.label.copyWith(color: _range == r ? AppColors.gold : AppColors.textTertiary, fontWeight: FontWeight.w600)),
-              ),
-            ),
-          ]),
-          const SizedBox(height: 12),
-
-          // Price chart
-          _PriceChart(history: s.history, range: _range),
-          const SizedBox(height: 16),
-
-          // Key stats
-          Container(
-            decoration: BoxDecoration(color: AppColors.bgSurface, borderRadius: BorderRadius.circular(AppRadius.card), border: Border.all(color: AppColors.borderSubtle)),
-            padding: const EdgeInsets.all(14),
-            child: Column(children: [
-              for (final row in [
-                ('Market Cap',   s.mktCap,                           AppColors.textPrimary),
-                ('P/E Ratio',    s.pe.toString(),                    AppColors.textPrimary),
-                ('Div. Yield',   '${s.yld}%',                        AppColors.emerald),
-                ('Volume',       NumberFormat.decimalPattern().format(s.vol), AppColors.textPrimary),
-                ('Sector',       s.sector,                           AppColors.textSecondary),
-                ('Country',      s.country,                          AppColors.textSecondary),
-              ])
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Text(row.$1, style: AppTypography.bodyS.copyWith(fontSize: 12)),
-                    Text(row.$2, style: AppTypography.dataS.copyWith(fontSize: 12, color: row.$3)),
-                  ]),
-                ),
-            ]),
-          ),
-          const SizedBox(height: 12),
-
-          // My position (if any)
-          if (pos != null) Container(
-            decoration: BoxDecoration(
-              color: AppColors.bgSurface, borderRadius: BorderRadius.circular(AppRadius.card),
-              border: Border.all(color: AppColors.borderSubtle),
-            ),
-            padding: const EdgeInsets.all(14),
-            child: Column(children: [
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Text('My Position', style: AppTypography.labelCaps),
-                Text('${pos.shares} shares', style: AppTypography.dataS.copyWith(fontSize: 12, color: AppColors.gold)),
-              ]),
-              const SizedBox(height: 8),
-              Row(children: [
-                _PosStat(label: 'Avg cost',     val: '\$ ${pos.avgCost.toStringAsFixed(2)}'),
-                _PosStat(label: 'Current',      val: '\$ ${pos.current.toStringAsFixed(2)}'),
-                _PosStat(
-                  label: 'Gain/Loss',
-                  val: '${(pos.current - pos.avgCost) * pos.shares >= 0 ? '+' : ''}\$ ${NumberFormat.decimalPattern().format(((pos.current - pos.avgCost) * pos.shares).round())}',
-                  color: (pos.current - pos.avgCost) >= 0 ? AppColors.emerald : AppColors.crimson,
-                ),
-              ]),
-            ]),
-          ),
-          const SizedBox(height: 80),
-        ])),
-      ]),
-
-      // Sticky buy/sell footer
-      Positioned(
-        bottom: 0, left: 0, right: 0,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.screenH, 12, AppSpacing.screenH, 24),
-          decoration: const BoxDecoration(
-            color: AppColors.bgBase,
-            border: Border(top: BorderSide(color: AppColors.borderSubtle)),
-          ),
-          child: Row(children: [
-            Expanded(child: GestureDetector(
-              onTap: () => setState(() { _isBuy = true; _showTradeSheet = true; }),
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(color: AppColors.emerald.withOpacity(0.12), borderRadius: BorderRadius.circular(AppRadius.card), border: Border.all(color: AppColors.emerald.withOpacity(0.4))),
-                child: Center(child: Text('Buy', style: AppTypography.headingS.copyWith(color: AppColors.emerald))),
-              ),
-            )),
-            const SizedBox(width: 10),
-            Expanded(child: GestureDetector(
-              onTap: () => setState(() { _isBuy = false; _showTradeSheet = true; }),
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(color: AppColors.crimson.withOpacity(0.12), borderRadius: BorderRadius.circular(AppRadius.card), border: Border.all(color: AppColors.crimson.withOpacity(0.4))),
-                child: Center(child: Text('Sell', style: AppTypography.headingS.copyWith(color: AppColors.crimson))),
-              ),
-            )),
-          ]),
-        ),
+    final rc = _regionColors[country.region] ?? AppColors.gold;
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.bgSurface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
       ),
-
-      // Trade sheet
-      if (_showTradeSheet)
-        _TradeSheet(
-          stock: widget.stock,
-          isBuy: _isBuy,
-          qty: _qty,
-          onQtyChange: (q) => setState(() => _qty = q),
-          onClose: () => setState(() => _showTradeSheet = false),
-          onConfirm: () => setState(() => _showTradeSheet = false),
-        ),
-    ]);
+      padding: const EdgeInsets.fromLTRB(AppSpacing.screenH, 12, AppSpacing.screenH, 32),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: AppColors.borderStrong, borderRadius: BorderRadius.circular(2)))),
+        const SizedBox(height: 18),
+        Row(children: [
+          Text(country.name, style: AppTypography.displayM.copyWith(fontSize: 26)),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(color: rc.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6), border: Border.all(color: rc.withValues(alpha: 0.3))),
+            child: Text(country.region, style: AppTypography.label.copyWith(color: rc, fontWeight: FontWeight.w600)),
+          ),
+        ]),
+        const SizedBox(height: 4),
+        Text('${country.tier} economy', style: AppTypography.bodyM),
+        const SizedBox(height: 18),
+        // Metrics grid
+        Row(children: [
+          Expanded(child: _DetailMetric(label: 'Cost of Living', value: '${country.living}/c', color: AppColors.gold)),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(child: _DetailMetric(label: 'Income Tax', value: country.tax, color: AppColors.textPrimary)),
+        ]),
+        const SizedBox(height: AppSpacing.md),
+        Row(children: [
+          Expanded(child: _DetailMetric(label: 'Wage Level', value: country.wage, color: AppColors.textPrimary)),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(child: _DetailMetric(label: 'Advantage', value: country.advantage, color: AppColors.emerald)),
+        ]),
+        const SizedBox(height: 18),
+        Text('CHARACTERISTICS', style: AppTypography.labelCaps.copyWith(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 10),
+        Wrap(spacing: 6, runSpacing: 6, children: country.tags.map((t) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(color: AppColors.bgInput, borderRadius: BorderRadius.circular(6), border: Border.all(color: AppColors.borderSubtle)),
+          child: Text(t, style: AppTypography.label.copyWith(color: AppColors.textSecondary)),
+        )).toList()),
+        const SizedBox(height: 18),
+        if (country.isHome)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: AppColors.gold.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(AppRadius.card), border: Border.all(color: AppColors.gold.withValues(alpha: 0.25))),
+            child: Row(children: [
+              const Icon(Icons.home_rounded, color: AppColors.gold, size: 18),
+              const SizedBox(width: 10),
+              Expanded(child: Text('You live and operate here. Relocating moves your residence and job market.', style: AppTypography.bodyS.copyWith(fontSize: 12))),
+            ]),
+          )
+        else
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: AppColors.bgElevated, borderRadius: BorderRadius.circular(AppRadius.card), border: Border.all(color: AppColors.borderDefault)),
+            child: Row(children: [
+              const Icon(Icons.public, color: AppColors.sky, size: 18),
+              const SizedBox(width: 10),
+              Expanded(child: Text('Expand here by founding a company. Cross-country trade adds a logistics surcharge.', style: AppTypography.bodyS.copyWith(fontSize: 12))),
+            ]),
+          ),
+      ]),
+    );
   }
 }
 
-class _PosStat extends StatelessWidget {
-  const _PosStat({required this.label, required this.val, this.color});
-  final String label, val;
-  final Color? color;
+// ── Shared widgets ────────────────────────────────────────────────────────────
+
+class _SummaryStat extends StatelessWidget {
+  const _SummaryStat({required this.label, required this.value, this.valueColor = AppColors.textPrimary});
+  final String label, value;
+  final Color valueColor;
   @override
   Widget build(BuildContext context) => Expanded(child: Column(children: [
-    Text(label, style: AppTypography.labelCaps.copyWith(fontSize: 9)),
-    Text(val, style: AppTypography.dataS.copyWith(fontSize: 11, color: color ?? AppColors.textPrimary)),
+    Text(value, style: AppTypography.dataS.copyWith(color: valueColor, fontSize: 16)),
+    const SizedBox(height: 2),
+    Text(label, style: AppTypography.labelCaps.copyWith(fontSize: 10)),
   ]));
 }
 
-// ── Price Chart ───────────────────────────────────────────────────────────────
-
-class _PriceChart extends StatefulWidget {
-  const _PriceChart({required this.history, required this.range});
-  final List<double> history;
-  final int range;
+class _VDivider extends StatelessWidget {
   @override
-  State<_PriceChart> createState() => _PriceChartState();
+  Widget build(BuildContext context) => Container(width: 1, height: 28, color: AppColors.borderSubtle, margin: const EdgeInsets.symmetric(horizontal: 8));
 }
 
-class _PriceChartState extends State<_PriceChart> {
-  int? _hoverIdx;
-
-  List<double> get _data {
-    final n = widget.history.length;
-    final start = (n - widget.range).clamp(0, n);
-    return widget.history.sublist(start);
-  }
-
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({required this.label, required this.active, required this.onTap, this.accent = AppColors.gold});
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  final Color accent;
   @override
   Widget build(BuildContext context) {
-    final data = _data;
-    final n = data.length;
-    final isUp = n > 0 && data.last >= data.first;
-    final lineColor = isUp ? AppColors.emerald : AppColors.crimson;
-
-    return Column(children: [
-      if (_hoverIdx != null)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(children: [
-            Text('Cycle ${widget.history.length - n + _hoverIdx! + 1}', style: AppTypography.labelCaps.copyWith(fontSize: 10)),
-            const SizedBox(width: 12),
-            Text('\$ ${data[_hoverIdx!].toStringAsFixed(2)}', style: AppTypography.dataS.copyWith(fontSize: 14)),
-          ]),
-        ),
-      GestureDetector(
-        onPanUpdate: (d) {
-          final box = context.findRenderObject() as RenderBox?;
-          if (box == null) return;
-          final localX = box.globalToLocal(d.globalPosition).dx;
-          final idx = ((localX / box.size.width) * (n - 1)).round().clamp(0, n - 1);
-          setState(() => _hoverIdx = idx);
-        },
-        onPanEnd: (_) => setState(() => _hoverIdx = null),
-        child: SizedBox(
-          height: 140,
-          child: CustomPaint(
-            size: const Size(double.infinity, 140),
-            painter: _ChartPainter(data: data, hoverIdx: _hoverIdx, lineColor: lineColor),
-          ),
-        ),
-      ),
-    ]);
-  }
-}
-
-class _ChartPainter extends CustomPainter {
-  const _ChartPainter({required this.data, required this.hoverIdx, required this.lineColor});
-  final List<double> data;
-  final int? hoverIdx;
-  final Color lineColor;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (data.isEmpty) return;
-    final n = data.length;
-    const pad = EdgeInsets.fromLTRB(0, 12, 8, 20);
-    final iW = size.width - pad.left - pad.right;
-    final iH = size.height - pad.top - pad.bottom;
-    final minY = data.reduce(math.min) * 0.97;
-    final maxY = data.reduce(math.max) * 1.03;
-    final range = (maxY - minY).clamp(0.01, double.infinity);
-
-    double xScale(int i) => pad.left + (i / (n - 1)) * iW;
-    double yScale(double v) => pad.top + iH - ((v - minY) / range) * iH;
-
-    final linePts = List.generate(n, (i) => Offset(xScale(i), yScale(data[i])));
-    final path = Path()..moveTo(linePts[0].dx, linePts[0].dy);
-    for (int i = 1; i < n; i++) { path.lineTo(linePts[i].dx, linePts[i].dy); }
-
-    // Gradient fill
-    final fillPath = Path.from(path)
-      ..lineTo(linePts.last.dx, size.height - pad.bottom)
-      ..lineTo(pad.left, size.height - pad.bottom)
-      ..close();
-    canvas.drawPath(fillPath, Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter, end: Alignment.bottomCenter,
-        colors: [lineColor.withOpacity(0.22), lineColor.withOpacity(0)],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)));
-
-    // Grid lines
-    final gridPaint = Paint()..color = AppColors.borderSubtle..strokeWidth = 0.5;
-    for (final t in [0.0, 0.25, 0.5, 0.75, 1.0]) {
-      final y = pad.top + iH * (1 - t);
-      canvas.drawLine(Offset(pad.left, y), Offset(size.width - pad.right, y), gridPaint);
-    }
-
-    // Line
-    canvas.drawPath(path, Paint()
-      ..color = lineColor..strokeWidth = 1.8..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
-
-    // Crosshair
-    if (hoverIdx != null && hoverIdx! < n) {
-      final cx = xScale(hoverIdx!);
-      final cy = yScale(data[hoverIdx!]);
-      canvas.drawLine(Offset(cx, pad.top), Offset(cx, size.height - pad.bottom),
-          Paint()..color = AppColors.borderStrong..strokeWidth = 1..style = PaintingStyle.stroke..isAntiAlias = true
-            ..shader = null..maskFilter = null
-          );
-      canvas.drawCircle(Offset(cx, cy), 5, Paint()..color = lineColor);
-      canvas.drawCircle(Offset(cx, cy), 5, Paint()..color = AppColors.bgBase..style = PaintingStyle.stroke..strokeWidth = 2);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_ChartPainter old) => old.hoverIdx != hoverIdx || old.data != data;
-}
-
-// ── Trade Sheet ───────────────────────────────────────────────────────────────
-
-class _TradeSheet extends StatelessWidget {
-  const _TradeSheet({required this.stock, required this.isBuy, required this.qty, required this.onQtyChange, required this.onClose, required this.onConfirm});
-  final _StockData stock;
-  final bool isBuy;
-  final int qty;
-  final ValueChanged<int> onQtyChange;
-  final VoidCallback onClose, onConfirm;
-
-  @override
-  Widget build(BuildContext context) {
-    final total = stock.price * qty;
-    final color = isBuy ? AppColors.emerald : AppColors.crimson;
     return GestureDetector(
-      onTap: onClose,
-      child: Container(
-        color: Colors.black.withOpacity(0.7),
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: GestureDetector(
-            onTap: () {},
-            child: Container(
-              decoration: const BoxDecoration(
-                color: AppColors.bgElevated,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
-                border: Border(top: BorderSide(color: AppColors.borderDefault)),
-              ),
-              padding: const EdgeInsets.all(AppSpacing.screenH),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: AppColors.borderStrong, borderRadius: BorderRadius.circular(2)))),
-                const SizedBox(height: 14),
-                Text('${isBuy ? 'Buy' : 'Sell'} ${stock.id}', style: AppTypography.headingM),
-                const SizedBox(height: 16),
-                // Qty
-                Container(
-                  decoration: BoxDecoration(color: AppColors.bgSurface, borderRadius: BorderRadius.circular(AppRadius.card), border: Border.all(color: AppColors.borderDefault)),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Text('Quantity', style: AppTypography.bodyS.copyWith(fontSize: 12)),
-                    Row(children: [
-                      GestureDetector(onTap: () => onQtyChange((qty - 1).clamp(1, 9999)), child: Container(width: 28, height: 28, decoration: BoxDecoration(color: AppColors.bgInput, borderRadius: BorderRadius.circular(6)), child: const Icon(Icons.remove, size: 14, color: AppColors.textPrimary))),
-                      Padding(padding: const EdgeInsets.symmetric(horizontal: 14), child: Text('$qty', style: AppTypography.dataM.copyWith(fontSize: 18))),
-                      GestureDetector(onTap: () => onQtyChange(qty + 1), child: Container(width: 28, height: 28, decoration: BoxDecoration(color: AppColors.bgInput, borderRadius: BorderRadius.circular(6)), child: const Icon(Icons.add, size: 14, color: AppColors.textPrimary))),
-                    ]),
-                  ]),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  decoration: BoxDecoration(color: AppColors.bgSurface, borderRadius: BorderRadius.circular(AppRadius.card), border: Border.all(color: AppColors.borderDefault)),
-                  padding: const EdgeInsets.all(14),
-                  child: Column(children: [
-                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                      Text('Price per share', style: AppTypography.bodyS.copyWith(fontSize: 12)),
-                      Text('\$ ${stock.price.toStringAsFixed(2)}', style: AppTypography.dataS.copyWith(fontSize: 13)),
-                    ]),
-                    const SizedBox(height: 8),
-                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                      Text('Total', style: AppTypography.bodyS.copyWith(fontWeight: FontWeight.w600, fontSize: 13)),
-                      Text('\$ ${total.toStringAsFixed(2)}', style: AppTypography.dataS.copyWith(fontSize: 14, color: color, fontWeight: FontWeight.w600)),
-                    ]),
-                  ]),
-                ),
-                const SizedBox(height: 16),
-                GestureDetector(
-                  onTap: onConfirm,
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(15),
-                    decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(AppRadius.card)),
-                    child: Center(child: Text(
-                      '${isBuy ? 'Buy' : 'Sell'} $qty shares — \$ ${total.toStringAsFixed(2)}',
-                      style: AppTypography.headingS.copyWith(color: Colors.white),
-                    )),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  isBuy ? 'Order executes at next cycle settlement.' : 'Proceeds credited at next settlement.',
-                  style: AppTypography.labelCaps.copyWith(fontSize: 10),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-              ]),
-            ),
-          ),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: active ? accent.withValues(alpha: 0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: active ? accent : AppColors.borderDefault),
         ),
+        child: Text(label, style: AppTypography.label.copyWith(
+          color: active ? accent : AppColors.textTertiary,
+          fontWeight: FontWeight.w600,
+        )),
       ),
     );
   }
+}
+
+class _MiniMetric extends StatelessWidget {
+  const _MiniMetric({required this.label, required this.value});
+  final String label, value;
+  @override
+  Widget build(BuildContext context) => Row(children: [
+    Text('$label ', style: AppTypography.labelCaps.copyWith(fontSize: 10)),
+    Text(value, style: AppTypography.dataS.copyWith(fontSize: 12, color: AppColors.textSecondary)),
+  ]);
+}
+
+class _DetailMetric extends StatelessWidget {
+  const _DetailMetric({required this.label, required this.value, required this.color});
+  final String label, value;
+  final Color color;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(AppSpacing.lg),
+    decoration: BoxDecoration(
+      color: AppColors.bgElevated,
+      borderRadius: BorderRadius.circular(AppRadius.card),
+      border: Border.all(color: AppColors.borderDefault),
+    ),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: AppTypography.labelCaps.copyWith(fontSize: 10)),
+      const SizedBox(height: 6),
+      Text(value, style: AppTypography.dataS.copyWith(fontSize: 14, color: color)),
+    ]),
+  );
+}
+
+class _Empty extends StatelessWidget {
+  const _Empty({required this.icon, required this.message});
+  final IconData icon;
+  final String message;
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, color: AppColors.textTertiary, size: 40),
+      const SizedBox(height: 12),
+      Text(message, style: AppTypography.bodyM.copyWith(color: AppColors.textTertiary)),
+    ]),
+  );
 }

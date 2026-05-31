@@ -10,6 +10,7 @@ import '../../features/empire/stock_market_screen.dart';
 import '../../features/finance/finance_screen.dart';
 import '../../features/world/world_screen.dart';
 import '../../features/profile/profile_screen.dart';
+import '../../features/notifications/notification_center_screen.dart';
 import '../providers/auth_provider.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -21,6 +22,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: '/auth',       builder: (c, s) => const AuthScreen()),
       GoRoute(path: '/onboarding', builder: (c, s) => const OnboardingScreen()),
+      GoRoute(path: '/notifications', builder: (c, s) => const NotificationCenterScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => AppShell(shell: shell),
         branches: [
